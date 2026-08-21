@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (9 dari 19 modul PRD — Fase 1 selesai + Fase 2 mulai jalan, semua teruji end-to-end)
+## ✅ Progress Backend (10 dari 19 modul PRD — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -125,7 +125,17 @@ Semua 8 modul PRD Fase 1 sudah dikerjakan & teruji end-to-end: User & Role (03),
 - **Sudah teruji end-to-end**: buat 3 soal (pg/isian/essay) → buat quiz → siswa lihat quiz TANPA kunci jawaban → submit attempt (pg benar, isian match keyword "pi r^2", essay diisi) → auto_score 25/25 benar, essay_pending_count 1 → guru lihat antrean grading → guru nilai essay (20) → final_score jadi 45 (25+20), essay_pending_count jadi 0 → percobaan ke-2 terekam (attempts_used naik) → percobaan ke-3 ditolak (max_attempts=2) → siswa dilarang buat quiz (403) → validasi soal beda mapel ditolak saat buat quiz (422)
 - **Sengaja BELUM dikerjakan**: statistik `usedCount`/`correctRate` per soal di referensi `Ui-LMS` (analitik bank soal, cocoknya masuk modul 09 nanti) — bisa dihitung on-the-fly dari `quiz_attempt_answers` kalau dibutuhkan, tidak perlu kolom tersimpan.
 
-Lanjut ke modul 08 (Ujian Online) dan 09 (Bank Soal lengkap) kalau diminta — 08 kemungkinan besar tinggal nambah properti di atas `quizzes` (timer ketat/anti-tab-switch/monitoring) bukan bikin ulang dari nol, karena strukturnya sangat mirip Quiz.
+### Modul 08 — Ujian Online (CBT)
+- **Ternyata cukup beda dari Quiz buat jadi tabel sendiri** (bukan cuma nambah kolom di `quizzes` seperti dugaan awal): Ujian cuma 1x percobaan per siswa (bukan multi-attempt), punya state machine `terjadwal → aktif → selesai` yang dikontrol guru (`POST /exams/{id}/open|close`), butuh auto-save progress berkala (bukan submit sekali di akhir), dan skor dihitung dalam skala 0-100 (persentase), bukan jumlah poin mentah kayak Quiz.
+- `exams` + `exam_questions` (pivot, reuse bank soal `questions` yang sama dengan Quiz) + `exam_participants` (1 baris per siswa per ujian — nyimpen draft jawaban `answers` JSON yang ditimpa tiap auto-save, `tab_switches`, `score`, `last_saved_at`)
+- **Soal essay ditolak saat ujian dibuat** — beda dari Quiz, Ujian Online di referensi `Ui-LMS` sama sekali tidak punya alur grading manual essay, jadi validasi server menolak kalau ada soal essay ikut dipilih (403/422 duluan daripada nyimpen data yang gak pernah bisa dinilai)
+- **Ujian yang sudah dibuka (`aktif`) tidak bisa diedit lagi** (`PUT /exams/{id}` ditolak kalau status bukan `terjadwal`) — mencegah guru mengubah soal di tengah ujian berlangsung
+- Endpoint: `GET/POST /courses/{course}/exams`, `GET/PUT/DELETE /exams/{id}`, `POST /exams/{id}/open|close` (guru/admin), `POST /exams/{id}/start` (siswa masuk ruang ujian, cuma sekali), `PATCH /exams/{id}/progress` (auto-save berkala, kirim `answers` + `tab_switches`), `POST /exams/{id}/submit` (final, hitung skor), `GET /exams/{id}/participants` (monitoring guru: status/tab-switch/skor semua siswa)
+- **2 bug ditemukan & diperbaiki saat testing end-to-end** (bukan cuma "tidak error" — dicek nilai aktualnya): `status` exam dan `tab_switches` peserta sempat balik `null` bukan default seharusnya (`terjadwal`/`0`) karena Eloquent `create()` gak otomatis nge-refresh default kolom dari Postgres ke instance in-memory — sekarang di-set eksplisit di controller. **Kalau nemu pola serupa di controller lain** (field dengan `->default()` di migration tapi gak diisi eksplisit saat `create()`), curiga dulu ke bug yang sama.
+- **Sudah teruji end-to-end**: siswa dilarang mulai sebelum ujian dibuka (422) → guru buka ujian → siswa mulai (1x, percobaan kedua ditolak) → auto-save progress → submit final (1 benar dari 2 soal @ 50 poin → skor 50, sesuai skala 0-100) → siswa dilarang submit/save lagi setelah selesai (403) → guru lihat monitoring (tab_switches & skor akurat) → guru dilarang edit ujian yang sudah dibuka (422) → soal essay ditolak saat buat ujian (422) → guru tutup ujian (`selesai`)
+- **Sengaja BELUM dikerjakan**: proctoring webcam (referensi `Ui-LMS` sendiri menandainya "fase lanjutan, perlu persetujuan orang tua") — di luar scope CBT dasar.
+
+Lanjut ke modul 09 (Bank Soal lengkap: tagging kurikulum, statistik usedCount/correctRate, impor massal) kalau diminta — fondasinya (`questions`) sudah ada dari modul 07, tinggal diperluas.
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 

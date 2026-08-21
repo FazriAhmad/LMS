@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\MajorController;
 use App\Http\Controllers\Api\MaterialController;
@@ -89,6 +90,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/quizzes/{quiz}/attempts', [QuizController::class, 'attempts']);
     Route::get('/quiz-attempts/{attempt}', [QuizController::class, 'showAttempt']);
     Route::post('/quiz-attempts/{attempt}/grade-essay', [QuizController::class, 'gradeEssay']);
+
+    // Ujian Online (modul 08) — otorisasi guru pengampu/Admin & keanggotaan kelas ditegakkan di controller.
+    Route::get('/courses/{course}/exams', [ExamController::class, 'index']);
+    Route::post('/courses/{course}/exams', [ExamController::class, 'store']);
+    Route::get('/exams/{exam}', [ExamController::class, 'show']);
+    Route::put('/exams/{exam}', [ExamController::class, 'update']);
+    Route::delete('/exams/{exam}', [ExamController::class, 'destroy']);
+    Route::post('/exams/{exam}/open', [ExamController::class, 'open']);
+    Route::post('/exams/{exam}/close', [ExamController::class, 'close']);
+    Route::post('/exams/{exam}/start', [ExamController::class, 'start']);
+    Route::patch('/exams/{exam}/progress', [ExamController::class, 'saveProgress']);
+    Route::post('/exams/{exam}/submit', [ExamController::class, 'submit']);
+    Route::get('/exams/{exam}/participants', [ExamController::class, 'participants']);
 
     // Admin & Super Admin: kelola akun pengguna (User & Role — modul 03) dan data akademik.
     Route::middleware('role:superadmin|admin')->group(function () {
