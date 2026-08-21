@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\MajorController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\QuestionController;
+use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\ScheduleItemController;
 use App\Http\Controllers\Api\SchoolClassController;
 use App\Http\Controllers\Api\SubjectController;
@@ -70,6 +72,23 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/courses/{course}/grades', [GradeController::class, 'index']);
     Route::post('/courses/{course}/grades', [GradeController::class, 'store']);
     Route::get('/grades/me', [GradeController::class, 'me']);
+
+    // Bank Soal dasar (fondasi modul 07 Quiz) — otorisasi guru pengampu mapel/Admin di controller.
+    Route::get('/questions', [QuestionController::class, 'index']);
+    Route::post('/questions', [QuestionController::class, 'store']);
+    Route::put('/questions/{question}', [QuestionController::class, 'update']);
+    Route::delete('/questions/{question}', [QuestionController::class, 'destroy']);
+
+    // Quiz (modul 07) — otorisasi guru pengampu/Admin & keanggotaan kelas ditegakkan di controller.
+    Route::get('/courses/{course}/quizzes', [QuizController::class, 'index']);
+    Route::post('/courses/{course}/quizzes', [QuizController::class, 'store']);
+    Route::get('/quizzes/{quiz}', [QuizController::class, 'show']);
+    Route::put('/quizzes/{quiz}', [QuizController::class, 'update']);
+    Route::delete('/quizzes/{quiz}', [QuizController::class, 'destroy']);
+    Route::post('/quizzes/{quiz}/attempts', [QuizController::class, 'submitAttempt']);
+    Route::get('/quizzes/{quiz}/attempts', [QuizController::class, 'attempts']);
+    Route::get('/quiz-attempts/{attempt}', [QuizController::class, 'showAttempt']);
+    Route::post('/quiz-attempts/{attempt}/grade-essay', [QuizController::class, 'gradeEssay']);
 
     // Admin & Super Admin: kelola akun pengguna (User & Role — modul 03) dan data akademik.
     Route::middleware('role:superadmin|admin')->group(function () {

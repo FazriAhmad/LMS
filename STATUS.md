@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (8 dari 19 modul PRD — FASE 1 SELESAI, semua teruji end-to-end)
+## ✅ Progress Backend (9 dari 19 modul PRD — Fase 1 selesai + Fase 2 mulai jalan, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -110,9 +110,22 @@ C:\Users\Fazri\portofolio\LMS\
 
 Semua 8 modul PRD Fase 1 sudah dikerjakan & teruji end-to-end: User & Role (03), Manajemen Akademik (02), Course & Materi (04-05), Tugas (06), Jadwal (12), Presensi (11), Penilaian Dasar (10), Dashboard per Role (01).
 
-**Belum di-`git init`** — pertimbangkan commit pertama sebelum lanjut ke Fase 2, supaya progress ini tidak cuma ada di working directory.
+**Sudah di-`git init` & push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS), branch `main`. `.env`/`vendor`/`node_modules`/`database.sqlite` semua ter-exclude lewat `.gitignore` masing-masing folder — dicek manual sebelum push pertama, aman.
 
-Fase 2 ke atas (modul 07-09 Quiz/Ujian Online/Bank Soal, dan modul-modul lain di luar 8 ini) belum dikerjakan — cek PRD (link di atas) buat urutan lengkapnya kalau mau lanjut.
+## 🚀 FASE 2 — SEDANG BERJALAN
+
+### Modul 07 — Quiz
+- **Bank soal dasar (`questions`) dibangun sebagai fondasi bersama** buat Quiz (07), nanti dipakai juga oleh Ujian Online (08) dan diperluas jadi Bank Soal penuh (09) — bukan tabel terpisah per modul, karena soal memang harus reusable lintas quiz/ujian. Soal terikat ke `subject_id` (bukan `course_id`) supaya bisa dipakai ulang guru yang sama di kelas paralel manapun untuk mapel itu.
+- Tipe soal: `pg`/`tf` (opsi + kunci), `isian` (kunci + keyword alternatif buat fuzzy match), `essay` (tanpa kunci, dinilai manual). Otorisasi: guru pengampu mapel tsb (dicek dari `teaching_assignments`) atau Admin/Super Admin boleh buat; ubah/hapus cuma pembuat soal atau Admin.
+- `quizzes` + `quiz_questions` (pivot berurutan) + `quiz_attempts` + `quiz_attempt_answers` (jawaban per soal per percobaan, buat basis grading essay manual)
+- **Keamanan yang sengaja diperbaiki dari referensi `Ui-LMS`**: di reference, jawaban benar (`Question.answer`) selalu ada di data client meski quiz belum dikerjakan (karena semua data mock ada di browser). Di backend ini, `GET /quizzes/{id}` **menyembunyikan kunci jawaban dari siswa** sampai mereka submit attempt — endpoint attempt result baru mengungkap kunci setelah dikumpulkan. Guru/Admin selalu lihat kunci lengkap.
+- Auto-grading: pg/tf exact match, isian match kunci ATAU salah satu keyword (case-insensitive, whitespace-insensitive), essay selalu `is_correct=null` (butuh nilai manual guru lewat `POST /quiz-attempts/{id}/grade-essay`)
+- Endpoint: `GET/POST /courses/{course}/quizzes`, `GET/PUT/DELETE /quizzes/{id}`, `POST /quizzes/{id}/attempts` (siswa submit, validasi `max_attempts` & keanggotaan kelas), `GET /quizzes/{id}/attempts` (riwayat — siswa lihat punya sendiri, guru/admin lihat semua buat antrean grading), `GET /quiz-attempts/{id}` (detail + kunci), `POST /quiz-attempts/{id}/grade-essay`
+- Bank soal: `GET/POST/PUT/DELETE /questions` (filter `subject_id`/`type`/`difficulty`)
+- **Sudah teruji end-to-end**: buat 3 soal (pg/isian/essay) → buat quiz → siswa lihat quiz TANPA kunci jawaban → submit attempt (pg benar, isian match keyword "pi r^2", essay diisi) → auto_score 25/25 benar, essay_pending_count 1 → guru lihat antrean grading → guru nilai essay (20) → final_score jadi 45 (25+20), essay_pending_count jadi 0 → percobaan ke-2 terekam (attempts_used naik) → percobaan ke-3 ditolak (max_attempts=2) → siswa dilarang buat quiz (403) → validasi soal beda mapel ditolak saat buat quiz (422)
+- **Sengaja BELUM dikerjakan**: statistik `usedCount`/`correctRate` per soal di referensi `Ui-LMS` (analitik bank soal, cocoknya masuk modul 09 nanti) — bisa dihitung on-the-fly dari `quiz_attempt_answers` kalau dibutuhkan, tidak perlu kolom tersimpan.
+
+Lanjut ke modul 08 (Ujian Online) dan 09 (Bank Soal lengkap) kalau diminta — 08 kemungkinan besar tinggal nambah properti di atas `quizzes` (timer ketat/anti-tab-switch/monitoring) bukan bikin ulang dari nol, karena strukturnya sangat mirip Quiz.
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 

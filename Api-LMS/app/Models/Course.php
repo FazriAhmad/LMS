@@ -29,4 +29,9 @@ class Course extends Model
     {
         return $this->hasMany(Grade::class);
     }
+
+    public function quizzes(): HasMany
+    {
+        return $this->hasMany(Quiz::class);
+    }
 }
