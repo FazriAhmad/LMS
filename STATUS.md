@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (10 dari 19 modul PRD — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
+## ✅ Progress Backend (11 dari 19 modul PRD — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -135,7 +135,15 @@ Semua 8 modul PRD Fase 1 sudah dikerjakan & teruji end-to-end: User & Role (03),
 - **Sudah teruji end-to-end**: siswa dilarang mulai sebelum ujian dibuka (422) → guru buka ujian → siswa mulai (1x, percobaan kedua ditolak) → auto-save progress → submit final (1 benar dari 2 soal @ 50 poin → skor 50, sesuai skala 0-100) → siswa dilarang submit/save lagi setelah selesai (403) → guru lihat monitoring (tab_switches & skor akurat) → guru dilarang edit ujian yang sudah dibuka (422) → soal essay ditolak saat buat ujian (422) → guru tutup ujian (`selesai`)
 - **Sengaja BELUM dikerjakan**: proctoring webcam (referensi `Ui-LMS` sendiri menandainya "fase lanjutan, perlu persetujuan orang tua") — di luar scope CBT dasar.
 
-Lanjut ke modul 09 (Bank Soal lengkap: tagging kurikulum, statistik usedCount/correctRate, impor massal) kalau diminta — fondasinya (`questions`) sudah ada dari modul 07, tinggal diperluas.
+### Modul 09 — Bank Soal (lengkap)
+- **Tidak ada tabel baru** — memperluas `QuestionController` yang sudah ada dari modul 07 dengan 2 fitur nyata yang di referensi `Ui-LMS` (`BankSoal.tsx`) sebelumnya cuma dummy: filter pencarian (`?q=` di teks/kompetensi, pakai `ilike`) dan statistik `used_count`/`correct_rate` per soal.
+- **Statistik dihitung on-the-fly**, bukan kolom tersimpan yang perlu disinkronkan — `used_count` = jumlah kemunculan soal di jawaban quiz (`quiz_attempt_answers`) + peserta ujian yang sudah `selesai` (decode JSON `exam_participants.answers`); `correct_rate` = % jawaban benar dari yang **bisa dinilai otomatis** (pg/tf/isian), `null` buat soal essay atau soal yang belum pernah dipakai (bukan `0`, biar beda jelas sama "pernah dipakai tapi semua salah")
+- **Sudah teruji end-to-end** dengan skenario gabungan lintas modul: 1 soal PG dipakai di quiz (2×, 1 benar 1 salah) + ujian (1×, benar) → `used_count: 3`, `correct_rate: 67` (2 dari 3 benar) — dihitung benar gabungan dari dua sumber data yang strukturnya beda (quiz pakai tabel jawaban per-soal, ujian pakai JSON blob per-peserta). Soal essay dipakai 2× tapi `correct_rate: null` (sesuai — essay gak bisa dinilai otomatis). Filter pencarian `?q=` teruji cari di teks maupun kompetensi.
+- **Sengaja BELUM dikerjakan**: import Excel massal & export — di referensi `Ui-LMS` ini cuma tombol dummy yang munculin toast "(demo)", bukan fitur nyata yang perlu direplikasi persis; export sebenarnya bisa dikerjakan client-side dari hasil `GET /questions` tanpa endpoint backend terpisah. Tagging kurikulum lanjutan (di luar field `kompetensi` yang sudah ada) juga belum — PRD belum spesifik soal ini butuh struktur apa.
+
+## 🚀 Fase 2 lanjut
+
+Modul 07 (Quiz), 08 (Ujian Online), 09 (Bank Soal) — inti asesmen — sudah selesai semua & saling terhubung (bank soal dipakai bersama oleh quiz & ujian). Modul Fase 2 lain di luar ketiga ini (kalau ada di PRD — cek link PRD di atas buat daftar lengkap modul per fase) belum dikerjakan.
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 
