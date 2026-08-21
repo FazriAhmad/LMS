@@ -8,9 +8,11 @@ use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
+use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\GradeWeightController;
 use App\Http\Controllers\Api\MajorController;
+use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\QuestionController;
@@ -18,6 +20,7 @@ use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\ScheduleItemController;
 use App\Http\Controllers\Api\SchoolClassController;
 use App\Http\Controllers\Api\SubjectController;
+use App\Http\Controllers\Api\TeacherNoteController;
 use App\Http\Controllers\Api\TeachingAssignmentController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -82,6 +85,24 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/courses/{course}/progress', [ProgressController::class, 'courseProgress']);
     Route::get('/students/{student}/activity', [ProgressController::class, 'studentActivity']);
     Route::get('/students/inactive', [ProgressController::class, 'inactiveStudents']);
+
+    // Forum diskusi per course (bagian modul 04, komunikasi cukup lewat forum sesuai keputusan produk).
+    Route::get('/courses/{course}/forum-threads', [ForumController::class, 'index']);
+    Route::post('/courses/{course}/forum-threads', [ForumController::class, 'store']);
+    Route::get('/forum-threads/{forumThread}', [ForumController::class, 'show']);
+    Route::delete('/forum-threads/{forumThread}', [ForumController::class, 'destroy']);
+    Route::post('/forum-threads/{forumThread}/replies', [ForumController::class, 'storeReply']);
+    Route::delete('/forum-replies/{forumReply}', [ForumController::class, 'destroyReply']);
+
+    // Portal Orang Tua (modul 15) — nilai & presensi anak sudah lewat endpoint yang ada (?student_id=).
+    Route::get('/parent/children', [ParentPortalController::class, 'children']);
+    Route::get('/parent/schedule', [ParentPortalController::class, 'schedule']);
+    Route::get('/parent/assignments', [ParentPortalController::class, 'assignments']);
+
+    // Catatan guru ke orang tua (bagian modul 15).
+    Route::get('/students/{student}/notes', [TeacherNoteController::class, 'index']);
+    Route::post('/students/{student}/notes', [TeacherNoteController::class, 'store']);
+    Route::delete('/teacher-notes/{teacherNote}', [TeacherNoteController::class, 'destroy']);
 
     // Bank Soal dasar (fondasi modul 07 Quiz) — otorisasi guru pengampu mapel/Admin di controller.
     Route::get('/questions', [QuestionController::class, 'index']);

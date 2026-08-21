@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (12/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
+## ✅ Progress Backend (14/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 hampir selesai, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -153,8 +153,8 @@ PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari secti
 - ✅ **07 Quiz**, **08 Ujian Online** (tanpa monitoring lanjutan — itu Fase 3), **09 Bank Soal** — selesai
 - ✅ **10 Penilaian lengkap (bobot)** — selesai (baru saja, lihat di atas)
 - ✅ **13 Progress & Aktivitas** — selesai (lihat detail di bawah)
-- ⬜ **14 Komunikasi** — Pengumuman, Forum diskusi per course, **Chat guru-siswa dengan audit trail permanen** (kebutuhan perlindungan anak, bukan privasi standar — PRD eksplisit soal ini), Notifikasi in-app+email. PRD rekomendasi stack pakai **Laravel Reverb (WebSocket)** buat real-time — ini keputusan infra baru, belum ada di project.
-- ⬜ **15 Portal Orang Tua** — sebagian sudah tercover gak langsung (endpoint `grades/me`, `attendance/summary`, Dashboard ortu semua sudah terima `student_id`/anak), yang belum: "catatan guru" khusus ke ortu (beda dari feedback tugas biasa) + endpoint portal terpusat
+- ✅ **14 Komunikasi → dipersempit jadi Forum saja** (keputusan produk user: "tidak usah ada modul komunikasi, komunikasi lewat forum saja") — Pengumuman, Chat guru-siswa+audit trail, dan Notifikasi **sengaja tidak dikerjakan**, bukan kelupaan. Forum diskusi per course (sebenarnya bagian modul 04, Fase 1, tapi belum sempat dikerjakan waktu itu) yang dibangun sebagai gantinya.
+- ✅ **15 Portal Orang Tua** — selesai (lihat detail di bawah)
 - ⬜ **16 Laporan & Export** — rekap lintas modul, export Excel/PDF/CSV **lewat background job (Laravel Queue)**, notifikasi saat file siap — infra baru (queue) belum ada di project, PRD sendiri sebut "driver database untuk awal"
 - ⬜ **19 Admin Sistem** — profil/branding sekolah, konfigurasi kanal notifikasi, UI trigger backup manual
 
@@ -164,6 +164,18 @@ PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari secti
 - **Bug ditemukan & diperbaiki saat testing**: query `selectRaw('max(...) as at')` di Postgres balik sebagai string mentah, bukan otomatis ke-cast Carbon (beda dari akses attribute biasa yang kena `$casts` model) — perbandingan tanggal (`<`, `max()`) jadi salah kalau dibiarkan string. Diperbaiki dengan `Carbon::parse()` eksplisit sebelum dibandingkan.
 - **Sengaja BELUM dikerjakan**: "durasi belajar" (estimasi waktu di dalam course) — PRD sendiri bilang ini "berdasar aktivitas sesi, bukan pengukuran presisi", tapi tetap butuh mekanisme tracking baru (heartbeat/session ping) yang belum ada infrastrukturnya sama sekali di project ini, beda dari 3 fitur lain yang bisa dihitung murni dari data existing. Perlu keputusan desain terpisah (interval ping, apa yang dihitung sebagai "aktif").
 - **Sudah teruji end-to-end**: siswa selesaikan materi → progress course 1/1 (100%) → aktivitas muncul di linimasa guru → `students/inactive?days=365` kosong (siswa baru aktif) → `days=0` menampilkan siswa (aktivitas "kemarin" terhadap cutoff sekarang) → siswa dilarang akses daftar siswa tidak aktif (403)
+
+### Modul 04 (susulan) — Forum Diskusi
+- `forum_threads` + `forum_replies`, terikat ke `course_id` — siapapun yang punya akses lihat course (guru pengampu, siswa di kelasnya, admin/kepsek) boleh buat thread & balas
+- Moderasi hapus: penulis sendiri, guru pengampu course, atau Admin/Super Admin
+- **Sudah teruji end-to-end**: guru buat thread → siswa lihat & balas → siswa hapus balasannya sendiri (boleh) → siswa coba hapus thread guru (ditolak 403)
+
+### Modul 15 — Portal Orang Tua
+- **Celah keamanan nyata ditemukan & ditutup**: sebelum modul ini, role `ortu` **sama sekali tidak punya jalur akses** ke jadwal & tugas anaknya — `authorizeView()` di `AssignmentController`/`ScheduleItemController`/`QuizController`/dst cuma cek admin/kepsek/guru-pengampu/siswa-di-kelasnya, tidak ada cabang buat ortu. Nilai (`grades/me`) & presensi (`attendance/summary`) sudah lebih dulu punya dukungan `?student_id=` dari modul-modul itu, jadi tidak diduplikasi.
+- **Pendekatan yang dipilih**: bukan menambal `authorizeView()` di 4-5 controller berbeda (risiko regresi lebih besar), tapi bikin `ParentPortalController` terpisah yang query data yang sama dengan otorisasi ketat "anak ini harus terhubung ke akun ortu yang login" (`$user->children()->where('users.id', $studentId)`)
+- Endpoint: `GET /parent/children`, `GET /parent/schedule?student_id=`, `GET /parent/assignments?student_id=` — semua 403 kalau `student_id` bukan anak sendiri atau tidak dikirim
+- **Catatan guru** (fitur baru, beda dari feedback tugas biasa): tabel `teacher_notes`, guru yang mengajar siswa itu (atau wali kelasnya) bisa tulis catatan kualitatif, ortu & siswa bisa baca, cuma penulis/admin yang bisa hapus. Endpoint `GET/POST /students/{id}/notes`, `DELETE /teacher-notes/{id}`.
+- **Sudah teruji end-to-end**: ortu lihat daftar anak → lihat jadwal & tugas anak (data match dengan yang dibuat) → **ortu dilarang akses data siswa lain** (403, termasuk kalau `student_id` tidak dikirim sama sekali) → guru tulis catatan → ortu baca → ortu dilarang menulis catatan (403, cuma guru/admin)
 
 **Fase 3** (belum dikerjakan sama sekali, sengaja — butuh keputusan kebijakan/kematangan operasional dulu): proctoring webcam (+ konsen ortu), QR attendance dinamis, storage monitoring, AI-assisted essay scoring, 2FA & audit log diperluas.
 
