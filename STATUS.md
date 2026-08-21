@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (11/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
+## ✅ Progress Backend (12/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -152,11 +152,18 @@ Semua 8 modul PRD Fase 1 sudah dikerjakan & teruji end-to-end: User & Role (03),
 PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari section `#roadmap`:
 - ✅ **07 Quiz**, **08 Ujian Online** (tanpa monitoring lanjutan — itu Fase 3), **09 Bank Soal** — selesai
 - ✅ **10 Penilaian lengkap (bobot)** — selesai (baru saja, lihat di atas)
-- ⬜ **13 Progress & Aktivitas** — % materi selesai, durasi belajar, log aktivitas linimasa, penanda siswa tidak aktif N hari
+- ✅ **13 Progress & Aktivitas** — selesai (lihat detail di bawah)
 - ⬜ **14 Komunikasi** — Pengumuman, Forum diskusi per course, **Chat guru-siswa dengan audit trail permanen** (kebutuhan perlindungan anak, bukan privasi standar — PRD eksplisit soal ini), Notifikasi in-app+email. PRD rekomendasi stack pakai **Laravel Reverb (WebSocket)** buat real-time — ini keputusan infra baru, belum ada di project.
 - ⬜ **15 Portal Orang Tua** — sebagian sudah tercover gak langsung (endpoint `grades/me`, `attendance/summary`, Dashboard ortu semua sudah terima `student_id`/anak), yang belum: "catatan guru" khusus ke ortu (beda dari feedback tugas biasa) + endpoint portal terpusat
 - ⬜ **16 Laporan & Export** — rekap lintas modul, export Excel/PDF/CSV **lewat background job (Laravel Queue)**, notifikasi saat file siap — infra baru (queue) belum ada di project, PRD sendiri sebut "driver database untuk awal"
 - ⬜ **19 Admin Sistem** — profil/branding sekolah, konfigurasi kanal notifikasi, UI trigger backup manual
+
+### Modul 13 — Progress & Aktivitas
+- **Tidak ada tabel log baru** — linimasa aktivitas digabung on-the-fly dari 4 tabel yang sudah punya timestamp relevan (`material_progress.completed_at`, `assignment_submissions.submitted_at`, `quiz_attempts.submitted_at`, `exam_participants.submitted_at`), bukan event-logging terpisah yang perlu disinkronkan
+- Endpoint: `GET /courses/{course}/progress` (% materi selesai per siswa; guru/admin lihat semua, siswa lihat dirinya), `GET /students/{student}/activity` (linimasa gabungan, terurut terbaru; guru/walikelas/admin/kepsek/ortu-anak-sendiri/siswa-diri-sendiri), `GET /students/inactive?days=N&school_class_id=` (siswa tanpa aktivitas N hari — wali kelas otomatis dibatasi ke kelas walinya sendiri kecuali override)
+- **Bug ditemukan & diperbaiki saat testing**: query `selectRaw('max(...) as at')` di Postgres balik sebagai string mentah, bukan otomatis ke-cast Carbon (beda dari akses attribute biasa yang kena `$casts` model) — perbandingan tanggal (`<`, `max()`) jadi salah kalau dibiarkan string. Diperbaiki dengan `Carbon::parse()` eksplisit sebelum dibandingkan.
+- **Sengaja BELUM dikerjakan**: "durasi belajar" (estimasi waktu di dalam course) — PRD sendiri bilang ini "berdasar aktivitas sesi, bukan pengukuran presisi", tapi tetap butuh mekanisme tracking baru (heartbeat/session ping) yang belum ada infrastrukturnya sama sekali di project ini, beda dari 3 fitur lain yang bisa dihitung murni dari data existing. Perlu keputusan desain terpisah (interval ping, apa yang dihitung sebagai "aktif").
+- **Sudah teruji end-to-end**: siswa selesaikan materi → progress course 1/1 (100%) → aktivitas muncul di linimasa guru → `students/inactive?days=365` kosong (siswa baru aktif) → `days=0` menampilkan siswa (aktivitas "kemarin" terhadap cutoff sekarang) → siswa dilarang akses daftar siswa tidak aktif (403)
 
 **Fase 3** (belum dikerjakan sama sekali, sengaja — butuh keputusan kebijakan/kematangan operasional dulu): proctoring webcam (+ konsen ortu), QR attendance dinamis, storage monitoring, AI-assisted essay scoring, 2FA & audit log diperluas.
 

@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\GradeWeightController;
 use App\Http\Controllers\Api\MajorController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\ScheduleItemController;
@@ -76,6 +77,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/grades/me', [GradeController::class, 'me']);
     Route::get('/subjects/{subject}/grade-weight', [GradeWeightController::class, 'show']);
     Route::put('/subjects/{subject}/grade-weight', [GradeWeightController::class, 'update']);
+
+    // Progress & Aktivitas (modul 13) — dihitung on-the-fly dari data modul lain, tanpa tabel log baru.
+    Route::get('/courses/{course}/progress', [ProgressController::class, 'courseProgress']);
+    Route::get('/students/{student}/activity', [ProgressController::class, 'studentActivity']);
+    Route::get('/students/inactive', [ProgressController::class, 'inactiveStudents']);
 
     // Bank Soal dasar (fondasi modul 07 Quiz) — otorisasi guru pengampu mapel/Admin di controller.
     Route::get('/questions', [QuestionController::class, 'index']);
