@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (11 dari 19 modul PRD — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
+## ✅ Progress Backend (11/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 jalan, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -141,9 +141,24 @@ Semua 8 modul PRD Fase 1 sudah dikerjakan & teruji end-to-end: User & Role (03),
 - **Sudah teruji end-to-end** dengan skenario gabungan lintas modul: 1 soal PG dipakai di quiz (2×, 1 benar 1 salah) + ujian (1×, benar) → `used_count: 3`, `correct_rate: 67` (2 dari 3 benar) — dihitung benar gabungan dari dua sumber data yang strukturnya beda (quiz pakai tabel jawaban per-soal, ujian pakai JSON blob per-peserta). Soal essay dipakai 2× tapi `correct_rate: null` (sesuai — essay gak bisa dinilai otomatis). Filter pencarian `?q=` teruji cari di teks maupun kompetensi.
 - **Sengaja BELUM dikerjakan**: import Excel massal & export — di referensi `Ui-LMS` ini cuma tombol dummy yang munculin toast "(demo)", bukan fitur nyata yang perlu direplikasi persis; export sebenarnya bisa dikerjakan client-side dari hasil `GET /questions` tanpa endpoint backend terpisah. Tagging kurikulum lanjutan (di luar field `kompetensi` yang sudah ada) juga belum — PRD belum spesifik soal ini butuh struktur apa.
 
-## 🚀 Fase 2 lanjut
+### Modul 10 upgrade — Penilaian: bobot custom per mapel
+- Tabel baru `grade_weights` (1 baris per `subject_id`, kolom `tugas`/`quiz`/`pts`/`pas` dalam persen, harus total 100). Kalau sekolah belum atur, fallback ke default 25/25/25/25 (perilaku Fase 1 tetap jalan tanpa perlu migrasi data).
+- `Grade::finalScore()` diubah dari konstanta hardcode jadi baca `GradeWeight::forSubject()` — **nilai lama otomatis ikut ke-update begitu bobot diubah**, gak perlu recalculate/migrate data existing (sudah diverifikasi: nilai tugas=100/lainnya=0 → final 25 di bobot default → ubah bobot tugas jadi 70% → final langsung jadi 70 tanpa sentuh baris `grades`).
+- Endpoint: `GET/PUT /subjects/{subject}/grade-weight` — guru pengampu mapel tsb atau Admin/Super Admin boleh atur, total wajib 100% (422 kalau tidak)
+- **Sudah teruji end-to-end**: bobot default 25/25/25/25 → simpan nilai → ubah bobot → nilai lama ikut berubah otomatis → validasi total≠100 ditolak → siswa dilarang ubah bobot (403)
 
-Modul 07 (Quiz), 08 (Ujian Online), 09 (Bank Soal) — inti asesmen — sudah selesai semua & saling terhubung (bank soal dipakai bersama oleh quiz & ujian). Modul Fase 2 lain di luar ketiga ini (kalau ada di PRD — cek link PRD di atas buat daftar lengkap modul per fase) belum dikerjakan.
+## 🚀 Sisa Fase 2 (dari roadmap resmi PRD)
+
+PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari section `#roadmap`:
+- ✅ **07 Quiz**, **08 Ujian Online** (tanpa monitoring lanjutan — itu Fase 3), **09 Bank Soal** — selesai
+- ✅ **10 Penilaian lengkap (bobot)** — selesai (baru saja, lihat di atas)
+- ⬜ **13 Progress & Aktivitas** — % materi selesai, durasi belajar, log aktivitas linimasa, penanda siswa tidak aktif N hari
+- ⬜ **14 Komunikasi** — Pengumuman, Forum diskusi per course, **Chat guru-siswa dengan audit trail permanen** (kebutuhan perlindungan anak, bukan privasi standar — PRD eksplisit soal ini), Notifikasi in-app+email. PRD rekomendasi stack pakai **Laravel Reverb (WebSocket)** buat real-time — ini keputusan infra baru, belum ada di project.
+- ⬜ **15 Portal Orang Tua** — sebagian sudah tercover gak langsung (endpoint `grades/me`, `attendance/summary`, Dashboard ortu semua sudah terima `student_id`/anak), yang belum: "catatan guru" khusus ke ortu (beda dari feedback tugas biasa) + endpoint portal terpusat
+- ⬜ **16 Laporan & Export** — rekap lintas modul, export Excel/PDF/CSV **lewat background job (Laravel Queue)**, notifikasi saat file siap — infra baru (queue) belum ada di project, PRD sendiri sebut "driver database untuk awal"
+- ⬜ **19 Admin Sistem** — profil/branding sekolah, konfigurasi kanal notifikasi, UI trigger backup manual
+
+**Fase 3** (belum dikerjakan sama sekali, sengaja — butuh keputusan kebijakan/kematangan operasional dulu): proctoring webcam (+ konsen ortu), QR attendance dinamis, storage monitoring, AI-assisted essay scoring, 2FA & audit log diperluas.
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 

@@ -7,9 +7,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Grade extends Model
 {
-    /** Bobot nilai akhir — sama seperti referensi Ui-LMS (src/lib/utils.ts WEIGHTS). */
-    public const WEIGHTS = ['tugas' => 0.25, 'quiz' => 0.25, 'pts' => 0.25, 'pas' => 0.25];
-
     protected $fillable = ['student_id', 'course_id', 'tugas', 'quiz', 'pts', 'pas', 'feedback'];
 
     public function student(): BelongsTo
@@ -22,13 +19,21 @@ class Grade extends Model
         return $this->belongsTo(Course::class);
     }
 
+    /** Bobot dipakai per mapel (modul 10 Fase 2) — default 25/25/25/25 kalau sekolah belum atur. */
+    public function weights(): array
+    {
+        return GradeWeight::forSubject($this->course->teachingAssignment->subject_id);
+    }
+
     public function finalScore(): int
     {
+        $w = $this->weights();
+
         return (int) round(
-            $this->tugas * self::WEIGHTS['tugas']
-            + $this->quiz * self::WEIGHTS['quiz']
-            + $this->pts * self::WEIGHTS['pts']
-            + $this->pas * self::WEIGHTS['pas']
+            $this->tugas * $w['tugas'] / 100
+            + $this->quiz * $w['quiz'] / 100
+            + $this->pts * $w['pts'] / 100
+            + $this->pas * $w['pas'] / 100
         );
     }
 

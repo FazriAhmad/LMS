@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\GradeController;
+use App\Http\Controllers\Api\GradeWeightController;
 use App\Http\Controllers\Api\MajorController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\QuestionController;
@@ -73,6 +74,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/courses/{course}/grades', [GradeController::class, 'index']);
     Route::post('/courses/{course}/grades', [GradeController::class, 'store']);
     Route::get('/grades/me', [GradeController::class, 'me']);
+    Route::get('/subjects/{subject}/grade-weight', [GradeWeightController::class, 'show']);
+    Route::put('/subjects/{subject}/grade-weight', [GradeWeightController::class, 'update']);
 
     // Bank Soal dasar (fondasi modul 07 Quiz) — otorisasi guru pengampu mapel/Admin di controller.
     Route::get('/questions', [QuestionController::class, 'index']);
