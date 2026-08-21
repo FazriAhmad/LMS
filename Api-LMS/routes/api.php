@@ -17,8 +17,10 @@ use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\QuizController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScheduleItemController;
 use App\Http\Controllers\Api\SchoolClassController;
+use App\Http\Controllers\Api\SchoolSettingController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TeacherNoteController;
 use App\Http\Controllers\Api\TeachingAssignmentController;
@@ -31,6 +33,8 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/school-setting', [SchoolSettingController::class, 'show']);
+    Route::post('/school-setting', [SchoolSettingController::class, 'update']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
 
@@ -103,6 +107,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/students/{student}/notes', [TeacherNoteController::class, 'index']);
     Route::post('/students/{student}/notes', [TeacherNoteController::class, 'store']);
     Route::delete('/teacher-notes/{teacherNote}', [TeacherNoteController::class, 'destroy']);
+
+    // Laporan (modul 16) — sync, ?format=csv buat export.
+    Route::get('/reports/grades', [ReportController::class, 'grades']);
+    Route::get('/reports/attendance', [ReportController::class, 'attendance']);
+    Route::get('/reports/class-performance', [ReportController::class, 'classPerformance']);
 
     // Bank Soal dasar (fondasi modul 07 Quiz) — otorisasi guru pengampu mapel/Admin di controller.
     Route::get('/questions', [QuestionController::class, 'index']);

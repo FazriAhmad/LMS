@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (14/19 modul + 1 upgrade Fase 2 — Fase 1 selesai + Fase 2 hampir selesai, semua teruji end-to-end)
+## ✅ Progress Backend (16/19 modul + 1 upgrade — FASE 1 & FASE 2 SELESAI, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -155,8 +155,8 @@ PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari secti
 - ✅ **13 Progress & Aktivitas** — selesai (lihat detail di bawah)
 - ✅ **14 Komunikasi → dipersempit jadi Forum saja** (keputusan produk user: "tidak usah ada modul komunikasi, komunikasi lewat forum saja") — Pengumuman, Chat guru-siswa+audit trail, dan Notifikasi **sengaja tidak dikerjakan**, bukan kelupaan. Forum diskusi per course (sebenarnya bagian modul 04, Fase 1, tapi belum sempat dikerjakan waktu itu) yang dibangun sebagai gantinya.
 - ✅ **15 Portal Orang Tua** — selesai (lihat detail di bawah)
-- ⬜ **16 Laporan & Export** — rekap lintas modul, export Excel/PDF/CSV **lewat background job (Laravel Queue)**, notifikasi saat file siap — infra baru (queue) belum ada di project, PRD sendiri sebut "driver database untuk awal"
-- ⬜ **19 Admin Sistem** — profil/branding sekolah, konfigurasi kanal notifikasi, UI trigger backup manual
+- ✅ **16 Laporan & Export** — selesai, **diproses sync** (keputusan produk, bukan Laravel Queue seperti disarankan PRD — lihat detail di bawah)
+- ✅ **19 Admin Sistem → dipersempit ke profil/branding sekolah** — konfigurasi notifikasi & trigger backup **sengaja tidak dikerjakan** (lihat alasan di bawah)
 
 ### Modul 13 — Progress & Aktivitas
 - **Tidak ada tabel log baru** — linimasa aktivitas digabung on-the-fly dari 4 tabel yang sudah punya timestamp relevan (`material_progress.completed_at`, `assignment_submissions.submitted_at`, `quiz_attempts.submitted_at`, `exam_participants.submitted_at`), bukan event-logging terpisah yang perlu disinkronkan
@@ -176,6 +176,35 @@ PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari secti
 - Endpoint: `GET /parent/children`, `GET /parent/schedule?student_id=`, `GET /parent/assignments?student_id=` — semua 403 kalau `student_id` bukan anak sendiri atau tidak dikirim
 - **Catatan guru** (fitur baru, beda dari feedback tugas biasa): tabel `teacher_notes`, guru yang mengajar siswa itu (atau wali kelasnya) bisa tulis catatan kualitatif, ortu & siswa bisa baca, cuma penulis/admin yang bisa hapus. Endpoint `GET/POST /students/{id}/notes`, `DELETE /teacher-notes/{id}`.
 - **Sudah teruji end-to-end**: ortu lihat daftar anak → lihat jadwal & tugas anak (data match dengan yang dibuat) → **ortu dilarang akses data siswa lain** (403, termasuk kalau `student_id` tidak dikirim sama sekali) → guru tulis catatan → ortu baca → ortu dilarang menulis catatan (403, cuma guru/admin)
+
+### Modul 16 — Laporan & Export
+- **Keputusan produk: sync, bukan Laravel Queue** seperti disarankan PRD — user pilih ini karena untuk skala satu sekolah proses langsung cukup cepat, dan queue worker terpisah (`php artisan queue:work`) nambah proses yang harus di-manage di luar web server. Gampang dipindah ke queue job asli nanti kalau laporan mulai berat/lambat, tanpa ubah query intinya.
+- **Export CSV native PHP** (`fputcsv`), bukan library `maatwebsite/excel`/`dompdf` — CSV buka mulus di Excel, jadi cukup buat kebutuhan "export ke Excel" tanpa nambah dependency baru. Export PDF asli (rapor dengan layout) tidak dikerjakan — beda kebutuhan dari CSV tabular, butuh dompdf + template desain.
+- 3 laporan: `GET /reports/grades` (nilai per siswa, filter kelas/mapel), `GET /reports/attendance` (rekap H/I/S/A/T + %, filter kelas/rentang tanggal), `GET /reports/class-performance` (rata-rata nilai + kehadiran per kelas — buat kebutuhan Kepala Sekolah). Semua terima `?format=csv` buat download langsung.
+- Otorisasi: staf sekolah saja (guru/walikelas/admin/superadmin/kepsek), siswa/ortu ditolak — laporan ini level operasional/manajerial, beda dari data pribadi yang sudah dibuka di modul lain
+- **Bug ditemukan & diperbaiki saat testing**: `$request->string('format') !== 'csv'` selalu `true` (Laravel `Request::string()` balikin objek `Stringable`, bukan string biasa, jadi perbandingan `!==` dengan string literal gagal terus) — akibatnya `?format=csv` diam-diam balik JSON, bukan file CSV. Diperbaiki pakai `$request->query('format')` yang balikin string mentah. **Kalau nemu `$request->string(...)` dibandingkan langsung pakai `===`/`!==` di controller lain, curiga dulu ke bug yang sama.**
+- **Sudah teruji end-to-end**: nilai & presensi tercatat → laporan nilai & performa kelas JSON akurat → export CSV beneran jadi file (`Content-Disposition: attachment`, bukan JSON) → siswa ditolak akses laporan (403)
+
+### Modul 19 — Admin Sistem (dipersempit)
+- **Cuma profil/branding sekolah** yang dikerjakan: `school_settings` tabel singleton (selalu 1 baris, `firstOrCreate` otomatis kalau belum ada), field nama/nama-singkat/NPSN/alamat/email/telepon/logo. `GET /school-setting` (semua role login, buat ditampilkan di header), `POST /school-setting` (Admin/Super Admin saja, terima upload logo)
+- **"Konfigurasi notifikasi" sengaja di-skip**: gak ada channel notifikasi buat dikonfigurasi, karena modul Komunikasi (14) sengaja tidak dikerjakan (komunikasi cukup lewat Forum, keputusan produk)
+- **"Trigger backup manual" sengaja di-skip**: backup database sungguhan butuh akses shell (`pg_dump`) di luar scope endpoint API biasa — tombol "backup" yang cuma pura-pura sukses tanpa benar-benar melakukan apa pun lebih berbahaya daripada berguna (memberi rasa aman palsu). Kalau dibutuhkan, ini pantasnya jadi scheduled command (`php artisan schedule`) yang jalan di server, bukan endpoint HTTP.
+- **Sudah teruji end-to-end**: siswa lihat profil sekolah (default singleton) → siswa dilarang ubah (403) → admin update profil → data tersimpan & terbaca benar
+
+---
+
+## 🏁 FASE 1 & FASE 2 SELESAI
+
+16 dari 19 modul PRD sudah dikerjakan (semua Fase 1 + semua Fase 2 yang applicable, dengan beberapa penyesuaian scope by design lewat keputusan produk eksplisit — bukan kelupaan):
+- **Fase 1** (8 modul): User & Role, Manajemen Akademik, Course & Materi, Tugas, Jadwal, Presensi, Penilaian dasar, Dashboard per role
+- **Fase 2** (8 modul + 1 upgrade + 1 susulan Fase 1): Quiz, Ujian Online, Bank Soal, Penilaian lengkap (bobot), Progress & Aktivitas, Forum (pengganti Komunikasi penuh), Portal Orang Tua, Laporan & Export, Admin Sistem (dipersempit)
+
+**3 modul PRD sengaja tidak dikerjakan** (bukan lupa, ada alasan produk/teknis eksplisit — cek detail di masing-masing bagian modul di atas):
+- Komunikasi (14) versi penuh — dipersempit jadi Forum saja atas keputusan user
+- Bagian "konfigurasi notifikasi" & "trigger backup" dari Admin Sistem (19)
+- Fase 3 seluruhnya (proctoring webcam, QR attendance, storage monitoring, AI essay scoring, 2FA) — PRD sendiri menandainya "butuh kematangan operasional/keputusan kebijakan dulu"
+
+Semua sudah di-push ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS), branch `main`.
 
 **Fase 3** (belum dikerjakan sama sekali, sengaja — butuh keputusan kebijakan/kematangan operasional dulu): proctoring webcam (+ konsen ortu), QR attendance dinamis, storage monitoring, AI-assisted essay scoring, 2FA & audit log diperluas.
 
@@ -199,11 +228,13 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
 2. **Selalu `pkill -f "artisan serve"` setelah selesai testing** — sesi sebelumnya pernah kejadian proses `php artisan serve` numpuk nggak ke-kill dan bikin project lain (money-management) kelihatan "data hilang" padahal cuma nyasar ke server yang salah.
 3. **Migration pakai `->change()` akan gagal** — `doctrine/dbal` belum terinstall di project ini. Kalau perlu ubah kolom existing, pakai `DB::statement('ALTER TABLE ... ALTER COLUMN ...')` raw SQL, atau edit migration asli langsung kalau project masih fresh/belum ada data penting (lihat pola di migration `0001_01_01_000000_create_users_table.php` yang sudah diedit langsung dari bawaan Laravel).
 4. **Password akun yang dibuat via `POST /users` (admin bikin akun) itu RANDOM** kalau field `password` nggak dikirim eksplisit — jangan lupa set manual lewat tinker kalau mau testing login, atau kirim password eksplisit di request.
+5. **`$request->string('x') !== 'y'` SELALU `true`** — `Request::string()` balikin objek `Stringable`, bukan string biasa, jadi perbandingan langsung pakai `===`/`!==` gagal terus (bug nyata yang kejadian di `ReportController`, sudah diperbaiki). Kalau perlu bandingkan query param persis, pakai `$request->query('x')` yang balikin string mentah.
+6. **Eloquent `create()` gak otomatis refresh kolom yang punya `->default()` di migration** — field yang gak diisi eksplisit di array `create()` balik `null` di instance in-memory (bukan default DB-nya), meski di database beneran keisi default. Selalu isi eksplisit kolom dengan default di `create()`/`updateOrCreate()`, jangan andalkan default migration buat instance yang langsung dipakai di response.
 
 ## Kalau Lanjut Sesi Baru
 
 1. Baca file ini dulu.
-2. Baca PRD di link artifact di atas kalau perlu detail modul.
-3. **Fase 1 sudah selesai semua** (lihat bagian 🏁 di atas). Pertimbangkan `git init` + commit pertama dulu. Lanjut ke Fase 2 kalau user minta (modul 07-09: Quiz, Ujian Online, Bank Soal — cek PRD buat urutan/detail modul Fase 2 lainnya).
-4. Modul 07-09 (Quiz, Ujian Online, Bank Soal) dan modul lain sengaja Fase 2 ke atas, dikerjakan belakangan.
-5. Cek `git status` di `Api-LMS/` kalau ada — **sesi ini BELUM sempat `git init`/commit apapun**, semua kerjaan masih di working directory doang.
+2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
+3. **Fase 1 & Fase 2 sudah selesai semua** (lihat bagian 🏁 di atas, 16/19 modul PRD). Sisa: **Fase 3** (proctoring webcam, QR attendance, storage monitoring, AI essay scoring, 2FA — semua butuh keputusan kebijakan/kematangan operasional dulu, PRD sendiri yang bilang begitu) — jangan mulai kerjakan tanpa dikonfirmasi user duluan, ini bukan sekadar "fitur lanjutan biasa".
+4. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase selesai (pola yang dipakai sepanjang sesi ini) — bukan nunggu numpuk banyak modul dulu baru commit sekali.
+5. Kalau user minta fitur yang keliatan mirip Fase 3 atau butuh infra baru (WebSocket/queue/dsb), **tanya dulu** — 2 keputusan besar sesi ini (skip Komunikasi/Reverb, skip Queue buat Laporan) datang dari user langsung, bukan diputuskan sepihak.
