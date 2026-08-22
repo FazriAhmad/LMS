@@ -23,17 +23,17 @@ Kalau mau baca PRD lengkap, buka link di atas — jangan re-generate dari nol, a
 C:\Users\Fazri\portofolio\LMS\
 ├── STATUS.md          (file ini)
 ├── logo-sklh.jpg       (logo sekolah, buat branding — belum dipakai di kode)
-├── Ui-LMS/             (frontend React+TS+Vite, REFERENSI dari user — mock data, belum nyambung API asli)
+├── Ui-LMS/             (frontend React+TS+Vite — SEDANG disambungkan bertahap ke API asli, lihat bagian 🔌 di bawah)
 └── Api-LMS/            (backend Laravel, SEDANG DIBANGUN oleh Claude sesi ini)
 ```
 
-### Ui-LMS (referensi, jangan diubah struktur besarnya)
+### Ui-LMS (frontend — sedang disambungkan bertahap ke backend, lihat 🔌 di bawah)
 - Nama app: "EduNusa LMS — SMA Negeri 1 Nusantara"
 - React 19 + TypeScript + Vite + Tailwind v4 + Framer Motion + react-router-dom
-- `src/lib/types.ts` — model data lengkap (Role, User, Kelas, Mapel, Student, Course, Module, Material, Assignment, Quiz, Exam, GradeRow, dll) — **ini acuan utama buat desain schema backend**, hampir semua tabel backend saya turunkan dari sini
-- `src/lib/data.ts` + `src/lib/store.tsx` — data dummy in-memory, PERLU DIGANTI jadi API call asli begitu backend modul terkait selesai
+- `src/lib/types.ts` — model data lengkap (Role, User, Kelas, Mapel, Student, Course, Module, Material, Assignment, Quiz, Exam, GradeRow, dll) — **ini acuan utama buat desain schema backend**, hampir semua tabel backend saya turunkan dari sini. **Sengaja belum dirombak** biar halaman yang belum disambungkan tetap jalan pakai mock (lihat strategi migrasi di bagian 🔌).
+- `src/lib/api.ts` — **BARU**, klien fetch buat API asli (token di localStorage key `edunusa_token`, wrapper `api.get/post/put/patch/delete`, class `ApiError`)
+- `src/lib/data.ts` + `src/lib/store.tsx` — data dummy in-memory, **halaman yang BELUM disambungkan masih pakai ini** — jangan heran kalau sebagian halaman datanya nyata dan sebagian masih dummy, itu memang strategi migrasi bertahap yang disepakati user, bukan kerja setengah jadi yang lupa dirapikan
 - `src/pages/Integrasi.tsx` — halaman ini perlu **dihapus/diganti** nanti karena modul Integrasi sudah dicoret dari PRD
-- Login demo: 7 tombol quick-login per role, password dummy "demo123" (cuma di frontend, belum nyambung ke backend asli)
 - Launch config: `.claude/launch.json` di root portofolio sudah ada entry `"lms-ui"` (port 5173)
 
 ### Api-LMS (backend, progress sesi ini)
@@ -266,10 +266,31 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
 5. **`$request->string('x') !== 'y'` SELALU `true`** — `Request::string()` balikin objek `Stringable`, bukan string biasa, jadi perbandingan langsung pakai `===`/`!==` gagal terus (bug nyata yang kejadian di `ReportController`, sudah diperbaiki). Kalau perlu bandingkan query param persis, pakai `$request->query('x')` yang balikin string mentah.
 6. **Eloquent `create()` gak otomatis refresh kolom yang punya `->default()` di migration** — field yang gak diisi eksplisit di array `create()` balik `null` di instance in-memory (bukan default DB-nya), meski di database beneran keisi default. Selalu isi eksplisit kolom dengan default di `create()`/`updateOrCreate()`, jangan andalkan default migration buat instance yang langsung dipakai di response.
 
+## 🔌 Menyambungkan Ui-LMS ke Api-LMS (dimulai 2026-08-22, SEDANG BERJALAN)
+
+**Keputusan user (jangan diubah tanpa konfirmasi ulang)**: sambungkan **satu-per-satu**, halaman yang belum kebagian giliran **tetap pakai mock data** — bukan rombak semua sekaligus. Ini strategi yang sengaja dipilih karena skalanya besar (19 halaman, semua baca dari satu `store.tsx` raksasa dengan ID mock string `'s1'`/`'g1'` yang beda total dari ID numerik asli Postgres).
+
+### Sudah tersambung nyata (bukan mock lagi)
+- **Login/Logout** (`AuthController::login/logout` asli) — form ganti dari email jadi username (backend pakai username, bukan email), tombol "quick-login" lama (bypass password) diganti "isi otomatis" yang cuma ngisi form, tetap lewat POST /login sungguhan
+- **Sesi tervalidasi ulang tiap load** — kalau ada token tersimpan, di-cek ke `GET /me` dulu (bukan percaya cache `localStorage` mentah-mentah); kalau gak ada token, user lama di cache **dihapus otomatis** (bug nyata yang ketemu & diperbaiki pas testing: tanpa ini, user basi dari sebelum penyambungan ini bisa lolos ke Dashboard lalu semua API call gagal 401)
+- **Dashboard** (`GET /dashboard`, kelima varian per role: siswa/guru-walikelas/ortu/kepsek/admin) — bagian yang gak ada padanannya di backend (Aktivitas Terbaru LMS, Pengumuman, Ujian Aktif count, Storage card di admin) **sengaja dihilangkan dari tampilan**, bukan dibiarkan nunjuk ke data kosong/salah
+- File baru: `src/lib/api.ts` (klien fetch + token management), diverifikasi lewat browser sungguhan (bukan cuma `tsc --noEmit`) — login 3 role beda (wali kelas, siswa, superadmin), logout, kredensial salah, semua nunjukin angka asli dari database yang beda jauh dari mock (mis. mock selalu bilang "7 pengumpulan menunggu", punya asli nunjuk "0" karena datanya emang kosong)
+
+### Belum tersambung (masih 100% mock, nunggu giliran)
+Semua halaman lain: Akademik, Kurikulum, Jadwal, Kalender, Courses/CourseDetail, Tugas/TugasDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Nilai, Presensi, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
+
+### Yang perlu diwaspadai pas nyambungin halaman berikutnya
+1. **`user` object sekarang gak punya field mock** kayak `classId`/`subjectIds`/`homeroomClassId`/`childIds` (backend `AuthController::formatUser` gak balikin itu). Halaman yang masih baca `user.classId` dkk bakal dapet `undefined` — perlu diganti ambil dari API asli (mis. `GET /me`... tapi itu juga gak punya classId; classId siswa ada di `studentProfile` yang perlu endpoint terpisah atau ditambahkan ke response `/me` kalau memang dibutuhkan banyak halaman).
+2. **ID mismatch**: mock pakai id string custom (`'a1'`, `'q3'`), backend pakai integer auto-increment. Setiap halaman yang disambungkan, cek semua tempat yang compare/lookup by ID.
+3. **Field yang gak ada padanan di backend** (ACTIVITIES, ANNOUNCEMENTS, Chat guru-siswa, dll — karena modul Komunikasi di-skip) — halaman yang butuh ini harus disesuaikan tampilannya, bukan dipaksa manggil endpoint yang gak ada.
+4. **Selalu jalankan `npx tsc --noEmit`** di `Ui-LMS/` sebelum test browser — sudah kepakai sesi ini, langsung nangkep kalau ada type mismatch tanpa perlu buka browser dulu.
+5. **CORS backend sudah `allowed_origins: ['*']`** (lihat `Api-LMS/config/cors.php`) — gak perlu proxy Vite, fetch langsung `localhost:5173` → `localhost:8010` jalan.
+
 ## Kalau Lanjut Sesi Baru
 
 1. Baca file ini dulu.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
-3. **Fase 1 & Fase 2 sudah selesai semua** (lihat bagian 🏁 di atas, 16/19 modul PRD). Sisa: **Fase 3** (proctoring webcam, QR attendance, storage monitoring, AI essay scoring, 2FA — semua butuh keputusan kebijakan/kematangan operasional dulu, PRD sendiri yang bilang begitu) — jangan mulai kerjakan tanpa dikonfirmasi user duluan, ini bukan sekadar "fitur lanjutan biasa".
-4. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase selesai (pola yang dipakai sepanjang sesi ini) — bukan nunggu numpuk banyak modul dulu baru commit sekali.
-5. Kalau user minta fitur yang keliatan mirip Fase 3 atau butuh infra baru (WebSocket/queue/dsb), **tanya dulu** — 2 keputusan besar sesi ini (skip Komunikasi/Reverb, skip Queue buat Laporan) datang dari user langsung, bukan diputuskan sepihak.
+3. **Fase 1 & Fase 2 backend sudah selesai semua** (16/19 modul PRD). **Fase 3**: 3 dari 5 area selesai (QR Attendance, Storage Monitoring, 2FA & Audit Log) + fitur tambahan kunci fullscreen ujian; proctoring webcam & AI essay scoring di-skip atas keputusan user.
+4. **Penyambungan Ui-LMS↔Api-LMS SEDANG BERJALAN** (lihat 🔌 di atas) — baru Login+Dashboard, 18 halaman lain masih mock. Ini kemungkinan besar kerjaan lanjutan sesi berikutnya — tanya user mau lanjut ke halaman mana.
+5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
+6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.

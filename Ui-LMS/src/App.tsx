@@ -25,14 +25,20 @@ import Files from './pages/Files';
 import Integrasi from './pages/Integrasi';
 import Pengaturan from './pages/Pengaturan';
 
+function AuthSplash() {
+  return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">Memuat…</div>;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user } = useStore();
+  const { user, authLoading } = useStore();
+  if (authLoading) return <AuthSplash />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 function LoginGate() {
-  const { user } = useStore();
+  const { user, authLoading } = useStore();
+  if (authLoading) return <AuthSplash />;
   if (user) return <Navigate to="/" replace />;
   return <Login />;
 }

@@ -4,16 +4,32 @@ import type {
   ForumThread, Job, FileItem, ExamParticipant, Submission,
 } from './types';
 import {
-  USERS, PASSWORD, NOTIFS_INIT, ASSIGNMENTS, TODAY_ATTENDANCE_INIT, CHATS,
+  NOTIFS_INIT, ASSIGNMENTS, TODAY_ATTENDANCE_INIT, CHATS,
   ANNOUNCEMENTS, FORUMS, FILES, EXAMS, SCHOOL,
 } from './data';
+import { api, clearToken, getToken, setToken, ApiError } from './api';
+
+interface ApiUser {
+  id: string; name: string; username: string; email: string | null;
+  role: User['role']; title: string | null; color: string; avatarUrl: string | null;
+}
+
+interface LoginResponse {
+  user?: ApiUser;
+  token?: string;
+  requires_2fa?: boolean;
+}
+
+function apiUserToUser(u: ApiUser): User {
+  return { id: u.id, name: u.name, email: u.email ?? '', role: u.role, title: u.title ?? undefined, color: u.color };
+}
 
 interface Toast { id: number; text: string; type: 'success' | 'error' | 'info' }
 
 interface StoreShape {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  loginAs: (userId: string) => void;
+  authLoading: boolean;
+  login: (username: string, password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => void;
 
   notifications: Notif[];
@@ -72,6 +88,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return raw ? (JSON.parse(raw) as User) : null;
     } catch { return null; }
   });
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Token tersimpan dari sesi sebelumnya — validasi ke /me, jangan percaya cache user mentah-mentah.
+  useEffect(() => {
+    if (!getToken()) {
+      // User di localStorage tanpa token yang valid (mis. cache dari versi lama) — jangan dipercaya.
+      setUser(null);
+      localStorage.removeItem('edunusa_user');
+      setAuthLoading(false);
+      return;
+    }
+    api.get<{ user: ApiUser }>('/me')
+      .then(res => {
+        const u = apiUserToUser(res.user);
+        setUser(u);
+        localStorage.setItem('edunusa_user', JSON.stringify(u));
+      })
+      .catch(() => {
+        clearToken();
+        setUser(null);
+        localStorage.removeItem('edunusa_user');
+      })
+      .finally(() => setAuthLoading(false));
+  }, []);
   const [notifications, setNotifications] = useState<Notif[]>(NOTIFS_INIT);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>(ASSIGNMENTS);
@@ -104,22 +144,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setNotifications(n => [{ id: nextId('n'), text, time: new Date().toISOString(), read: false, kind }, ...n]);
   }, []);
 
-  const login = useCallback((email: string, password: string) => {
-    const u = USERS.find(x => x.email.toLowerCase() === email.toLowerCase());
-    if (!u || password !== PASSWORD) return false;
-    setUser(u);
-    localStorage.setItem('edunusa_user', JSON.stringify(u));
-    return true;
-  }, []);
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      const res = await api.post<LoginResponse>('/login', { username, password });
+      if (res.requires_2fa) {
+        return { ok: false, message: 'Akun ini pakai 2FA — login 2FA belum didukung di tampilan ini.' };
+      }
+      if (!res.user || !res.token) return { ok: false, message: 'Respons login tidak lengkap.' };
 
-  const loginAs = useCallback((userId: string) => {
-    const u = USERS.find(x => x.id === userId);
-    if (!u) return;
-    setUser(u);
-    localStorage.setItem('edunusa_user', JSON.stringify(u));
+      setToken(res.token);
+      const u = apiUserToUser(res.user);
+      setUser(u);
+      localStorage.setItem('edunusa_user', JSON.stringify(u));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.' };
+    }
   }, []);
 
   const logout = useCallback(() => {
+    api.post('/logout').catch(() => {});
+    clearToken();
     setUser(null);
     localStorage.removeItem('edunusa_user');
   }, []);
@@ -219,7 +264,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: StoreShape = {
-    user, login, loginAs, logout,
+    user, authLoading, login, logout,
     notifications, markAllRead, pushNotif,
     toasts, toast,
     assignments, submitAssignment, gradeSubmission, requestRevision,

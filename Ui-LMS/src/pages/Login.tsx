@@ -1,32 +1,43 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Lock, Mail, ShieldCheck, Sparkles, Users2, CalendarCheck, MonitorPlay } from 'lucide-react';
+import { GraduationCap, Lock, ShieldCheck, Sparkles, User as UserIcon, Users2, CalendarCheck, MonitorPlay } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { USERS, SCHOOL, PASSWORD, ROLE_LABELS, ROLE_COLORS } from '../lib/data';
-import { cn } from '../lib/utils';
+import { SCHOOL, ROLE_LABELS } from '../lib/data';
 import { Avatar } from '../components/ui';
 
+/** Akun contoh yang beneran ada di database — isi form, bukan login langsung tanpa password. */
+const DEMO_ACCOUNTS: { username: string; password: string; role: keyof typeof ROLE_LABELS; name: string; color: string }[] = [
+  { username: 'superadmin', password: 'admin12345', role: 'superadmin', name: 'Super Admin', color: '#4f46e5' },
+  { username: 'dewi_lestari', password: 'guru12345', role: 'walikelas', name: 'Dewi Lestari', color: '#0891b2' },
+  { username: 'citra_ayu', password: 'siswa12345', role: 'siswa', name: 'Citra Ayu Lestari', color: '#d97706' },
+];
+
 export default function Login() {
-  const { login, loginAs, toast } = useStore();
+  const { login, toast } = useStore();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (login(email, password)) {
+    setError('');
+    setLoading(true);
+    const res = await login(username, password);
+    setLoading(false);
+    if (res.ok) {
       toast('Selamat datang di EduNusa LMS!');
       navigate('/');
     } else {
-      setError('Email atau password salah. Gunakan password demo: demo123');
+      setError(res.message || 'Username atau password salah.');
     }
   };
 
-  const quick = (id: string) => {
-    loginAs(id);
-    toast('Login demo berhasil');
-    navigate('/');
+  const fillDemo = (acc: typeof DEMO_ACCOUNTS[number]) => {
+    setUsername(acc.username);
+    setPassword(acc.password);
+    setError('');
   };
 
   return (
@@ -51,12 +62,12 @@ export default function Login() {
 
           <form onSubmit={submit} className="mt-8 space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-slate-300">Email</label>
+              <label className="mb-1.5 block text-xs font-semibold text-slate-300">Username</label>
               <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 focus-within:border-indigo-400">
-                <Mail className="h-4 w-4 shrink-0 text-slate-500" />
+                <UserIcon className="h-4 w-4 shrink-0 text-slate-500" />
                 <input
-                  value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="nama@sman1.sch.id"
+                  value={username} onChange={e => setUsername(e.target.value)}
+                  placeholder="mis. dewi_lestari"
                   className="w-full bg-transparent py-3 text-sm text-white outline-none placeholder:text-slate-500"
                 />
               </div>
@@ -73,27 +84,24 @@ export default function Login() {
               </div>
             </div>
             {error && <p className="rounded-lg bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-400">{error}</p>}
-            <button type="submit" className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-900/50 transition hover:bg-indigo-500 active:scale-[0.99]">
-              Masuk
+            <button type="submit" disabled={loading} className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-900/50 transition hover:bg-indigo-500 active:scale-[0.99] disabled:opacity-60">
+              {loading ? 'Memeriksa…' : 'Masuk'}
             </button>
-            <p className="text-center text-[11px] text-slate-500">
-              Password demo untuk semua akun: <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-indigo-300">{PASSWORD}</code>
-            </p>
           </form>
 
           <div className="mt-8">
             <p className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Login cepat sebagai demo
+              <Sparkles className="h-3.5 w-3.5 text-amber-400" /> Isi otomatis akun contoh
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {USERS.map(u => (
+            <div className="grid grid-cols-3 gap-2">
+              {DEMO_ACCOUNTS.map(acc => (
                 <button
-                  key={u.id} onClick={() => quick(u.id)}
+                  key={acc.username} type="button" onClick={() => fillDemo(acc)}
                   className="group flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-3 transition hover:border-indigo-400/50 hover:bg-indigo-500/10"
                 >
-                  <Avatar name={u.name} color={u.color} size="sm" />
+                  <Avatar name={acc.name} color={acc.color} size="sm" />
                   <span className="text-center text-[10px] font-semibold leading-tight text-slate-300 group-hover:text-white">
-                    {ROLE_LABELS[u.role]}
+                    {ROLE_LABELS[acc.role]}
                   </span>
                 </button>
               ))}
