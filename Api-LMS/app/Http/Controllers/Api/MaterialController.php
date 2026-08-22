@@ -58,7 +58,7 @@ class MaterialController extends Controller
 
         $material = Material::create($data);
 
-        return response()->json(['data' => $this->formatMaterial($material)], 201);
+        return response()->json(['data' => $material->toApiArray()], 201);
     }
 
     public function update(Request $request, Material $material): JsonResponse
@@ -71,7 +71,7 @@ class MaterialController extends Controller
         ]);
         $material->update($data);
 
-        return response()->json(['data' => $this->formatMaterial($material)]);
+        return response()->json(['data' => $material->toApiArray()]);
     }
 
     public function destroy(Request $request, Material $material): JsonResponse
@@ -112,20 +112,5 @@ class MaterialController extends Controller
             return;
         }
         abort(403, 'Hanya guru pengampu atau Admin yang boleh mengubah materi ini.');
-    }
-
-    private function formatMaterial(Material $material): array
-    {
-        return [
-            'id' => $material->id,
-            'course_module_id' => $material->course_module_id,
-            'type' => $material->type,
-            'title' => $material->title,
-            'url' => $material->file_path ? $material->fileUrl() : $material->url,
-            'youtube_id' => $material->youtube_id,
-            'size' => $material->formattedSize(),
-            'duration' => $material->formattedDuration(),
-            'order' => $material->order,
-        ];
     }
 }

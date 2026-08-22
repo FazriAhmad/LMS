@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Course;
+use App\Models\MaterialProgress;
 use App\Models\TeachingAssignment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,15 +64,32 @@ class CourseController extends Controller
     public function show(Request $request, Course $course): JsonResponse
     {
         $this->authorizeView($request, $course);
+        $user = $request->user();
 
-        return response()->json([
-            'data' => $course->load([
-                'teachingAssignment.teacher:id,name',
-                'teachingAssignment.subject',
-                'teachingAssignment.schoolClass',
-                'modules.materials',
-            ]),
+        $course->load([
+            'teachingAssignment.teacher:id,name',
+            'teachingAssignment.subject',
+            'teachingAssignment.schoolClass',
+            'modules.materials',
         ]);
+
+        $data = $course->toArray();
+        $data['modules'] = $course->modules->map(fn ($mod) => [
+            'id' => $mod->id,
+            'title' => $mod->title,
+            'pertemuan' => $mod->pertemuan,
+            'order' => $mod->order,
+            'materials' => $mod->materials->map->toApiArray()->values(),
+        ])->values();
+
+        if ($user->hasRole('siswa')) {
+            $materialIds = $course->modules->flatMap->materials->pluck('id');
+            $data['completed_material_ids'] = MaterialProgress::where('student_id', $user->id)
+                ->whereIn('material_id', $materialIds)
+                ->pluck('material_id')->values();
+        }
+
+        return response()->json(['data' => $data]);
     }
 
     public function update(Request $request, Course $course): JsonResponse

@@ -60,4 +60,20 @@ class Material extends Model
 
         return sprintf('%d:%02d', intdiv($this->duration_seconds, 60), $this->duration_seconds % 60);
     }
+
+    /** Bentuk response API konsisten — dipakai MaterialController & CourseController::show. */
+    public function toApiArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'course_module_id' => $this->course_module_id,
+            'type' => $this->type,
+            'title' => $this->title,
+            'url' => $this->file_path ? $this->fileUrl() : $this->url,
+            'youtube_id' => $this->youtube_id,
+            'size' => $this->formattedSize(),
+            'duration' => $this->formattedDuration(),
+            'order' => $this->order,
+        ];
+    }
 }
