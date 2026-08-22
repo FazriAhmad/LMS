@@ -1,27 +1,72 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronLeft, Timer, Save, ShieldAlert, Flag, CheckCircle2, XCircle, MonitorCheck } from 'lucide-react';
-import { EXAMS, QUESTIONS, COURSES, getMapel, getClass } from '../lib/data';
+import { ChevronLeft, Timer, Save, ShieldAlert, Flag, CheckCircle2, MonitorCheck, Lock, Maximize } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { api, ApiError } from '../lib/api';
 import { cn, fmtCountdown } from '../lib/utils';
 import { Badge, Button, Card, Modal, ProgressBar } from '../components/ui';
-import { gradeQuestion } from './QuizPlayer';
+
+interface ApiQuestion { id: number; type: 'pg' | 'tf' | 'isian'; text: string; options: string[] | null; points: number }
+interface ApiParticipant {
+  status: 'sedang' | 'terkunci' | 'selesai'; answers: Record<string, string> | null;
+  tab_switches: number; score: number | null;
+}
+interface ApiExamDetail {
+  id: number; course_id: number; title: string; type: string; scheduled_at: string;
+  duration_min: number; status: string; questions: ApiQuestion[]; my_participation: ApiParticipant | null;
+}
+interface ApiCourseRef { teaching_assignment: { school_class: { name: string } } }
+
+const POLL_MS = 4000;
 
 export default function ExamPlayer() {
   const { id } = useParams();
-  const { user, examParticipants, updateExamParticipant, toast } = useStore();
-  const exam = EXAMS.find(e => e.id === id);
-  const [phase, setPhase] = useState<'intro' | 'run' | 'result'>('intro');
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const { toast } = useStore();
+  const [exam, setExam] = useState<ApiExamDetail | null>(null);
+  const [course, setCourse] = useState<ApiCourseRef | null>(null);
+  const [error, setError] = useState('');
+  const [phase, setPhase] = useState<'intro' | 'run' | 'locked' | 'result'>('intro');
+  const [answers, setAnswers] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [tabSwitches, setTabSwitches] = useState(0);
   const [warnOpen, setWarnOpen] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [score, setScore] = useState<number | null>(null);
+  const [starting, setStarting] = useState(false);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+  const tabSwitchesRef = useRef(tabSwitches);
+  tabSwitchesRef.current = tabSwitches;
 
-  const questions = (exam?.questionIds || []).map(qid => QUESTIONS.find(q => q.id === qid)!).filter(Boolean);
+  const load = () => {
+    api.get<{ data: ApiExamDetail }>(`/exams/${id}`)
+      .then(res => {
+        setExam(res.data);
+        return api.get<{ data: ApiCourseRef }>(`/courses/${res.data.course_id}`).then(c => ({ exam: res.data, course: c.data }));
+      })
+      .then(({ exam: e, course: c }) => {
+        setCourse(c);
+        const p = e.my_participation;
+        if (!p) { setPhase('intro'); return; }
+        if (p.status === 'sedang') {
+          setAnswers(Object.fromEntries(Object.entries(p.answers ?? {}).map(([k, v]) => [Number(k), v])));
+          setTabSwitches(p.tab_switches);
+          setTimeLeft(e.duration_min * 60);
+          setPhase('run');
+        } else if (p.status === 'terkunci') {
+          setTabSwitches(p.tab_switches);
+          setPhase('locked');
+        } else {
+          setScore(p.score);
+          setTabSwitches(p.tab_switches);
+          setPhase('result');
+        }
+      })
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'));
+  };
+  useEffect(load, [id]);
 
   // Timer
   useEffect(() => {
@@ -32,16 +77,16 @@ export default function ExamPlayer() {
 
   // Auto-save every 10s
   useEffect(() => {
-    if (phase !== 'run' || !exam || !user) return;
+    if (phase !== 'run' || !exam) return;
     const iv = window.setInterval(() => {
-      const now = new Date();
-      setLastSaved(now);
-      updateExamParticipant(exam.id, user.id, { status: 'sedang', lastSaved: now.toISOString() });
+      api.patch(`/exams/${exam.id}/progress`, { answers: answersRef.current, tab_switches: tabSwitchesRef.current })
+        .then(() => setLastSaved(new Date()))
+        .catch(() => {});
     }, 10000);
     return () => window.clearInterval(iv);
-  }, [phase, exam, user, updateExamParticipant]);
+  }, [phase, exam]);
 
-  // Tab switch detection
+  // Tab switch detection (informational — dicatat, tidak mengunci)
   useEffect(() => {
     if (phase !== 'run') return;
     const onVis = () => {
@@ -54,35 +99,90 @@ export default function ExamPlayer() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [phase]);
 
+  // Fullscreen exit -> lock (modul 08 upgrade)
+  useEffect(() => {
+    if (phase !== 'run' || !exam) return;
+    const onFsChange = () => {
+      if (!document.fullscreenElement && phaseRef.current === 'run') {
+        api.post(`/exams/${exam.id}/lock`).catch(() => {});
+        setPhase('locked');
+        toast('Kamu keluar dari mode layar penuh — ujian dikunci sampai guru membuka kembali.', 'error');
+      }
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, [phase, exam, toast]);
+
+  // Poll while locked, waiting for guru unlock/force-finish
+  useEffect(() => {
+    if (phase !== 'locked' || !exam) return;
+    const iv = window.setInterval(() => {
+      api.get<{ data: ApiExamDetail }>(`/exams/${exam.id}`).then(res => {
+        const p = res.data.my_participation;
+        if (!p) return;
+        if (p.status === 'sedang') {
+          setAnswers(Object.fromEntries(Object.entries(p.answers ?? {}).map(([k, v]) => [Number(k), v])));
+          setTabSwitches(p.tab_switches);
+        } else if (p.status === 'selesai') {
+          setScore(p.score);
+          setTabSwitches(p.tab_switches);
+          setPhase('result');
+        }
+      }).catch(() => {});
+    }, POLL_MS);
+    return () => window.clearInterval(iv);
+  }, [phase, exam]);
+
   useEffect(() => {
     if (phase === 'run' && timeLeft <= 0) finish(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, phase]);
 
-  if (!exam || !user) return <div className="py-10 text-center text-sm text-slate-400">Ujian tidak ditemukan.</div>;
-  const course = COURSES.find(c => c.id === exam.courseId)!;
-  const m = getMapel(course.mapelId);
+  if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
+  if (!exam || !course) return <div className="py-10 text-center text-sm text-slate-400">Memuat ujian…</div>;
+  const questions = exam.questions;
 
-  const start = () => {
-    setAnswers({});
-    setTabSwitches(0);
-    setTimeLeft(exam.durationMin * 60);
-    setLastSaved(new Date());
-    updateExamParticipant(exam.id, user.id, { status: 'sedang', tabSwitches: 0, lastSaved: new Date().toISOString() });
+  const enterFullscreen = async () => {
+    try {
+      await Promise.race([
+        document.documentElement.requestFullscreen(),
+        new Promise((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 1500)),
+      ]);
+    } catch { /* browser mungkin menolak/gagal tepat waktu — lanjut tanpa fullscreen */ }
+  };
+
+  const start = async () => {
+    setStarting(true);
+    try {
+      await api.post(`/exams/${exam.id}/start`);
+      await enterFullscreen();
+      setAnswers({});
+      setTabSwitches(0);
+      setTimeLeft(exam.duration_min * 60);
+      setLastSaved(new Date());
+      setPhase('run');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal memulai ujian', 'error');
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const resume = async () => {
+    await enterFullscreen();
     setPhase('run');
   };
 
-  const finish = (auto = false) => {
-    let earned = 0, total = 0;
-    questions.forEach(q => {
-      total += q.points;
-      if (gradeQuestion(q, answers[q.id])) earned += q.points;
-    });
-    const final = Math.round((earned / total) * 100);
-    setScore(final);
-    updateExamParticipant(exam.id, user.id, { status: 'selesai', score: final, tabSwitches, lastSaved: new Date().toISOString() });
-    setPhase('result');
-    toast(auto ? 'Waktu habis — ujian dikumpulkan otomatis (auto submit)' : 'Jawaban berhasil dikumpulkan', auto ? 'info' : 'success');
+  const finish = async (auto = false) => {
+    try {
+      const res = await api.post<{ data: ApiParticipant }>(`/exams/${exam.id}/submit`, { answers, tab_switches: tabSwitches });
+      setScore(res.data.score);
+      setPhase('result');
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      toast(auto ? 'Waktu habis — ujian dikumpulkan otomatis (auto submit)' : 'Jawaban berhasil dikumpulkan', auto ? 'info' : 'success');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal mengumpulkan ujian', 'error');
+    }
   };
 
   if (phase === 'intro') {
@@ -95,21 +195,48 @@ export default function ExamPlayer() {
               <MonitorCheck className="h-7 w-7" />
             </div>
             <h1 className="mt-4 font-display text-xl font-bold text-slate-900">{exam.title}</h1>
-            <p className="text-sm text-slate-500">{exam.type} · {m.name} · Kelas {getClass(exam.classId).name} · CBT</p>
+            <p className="text-sm text-slate-500">{exam.type} · Kelas {course.teaching_assignment.school_class.name} · CBT</p>
           </div>
-          <div className="mt-6 grid grid-cols-3 gap-3 text-center">
-            <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">{questions.length}</p><p className="text-[10px] font-semibold text-slate-500">Soal</p></div>
-            <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">{exam.durationMin} mnt</p><p className="text-[10px] font-semibold text-slate-500">Durasi</p></div>
-            <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">Auto</p><p className="text-[10px] font-semibold text-slate-500">Grading</p></div>
+
+          {exam.status !== 'aktif' ? (
+            <p className="mt-6 rounded-xl bg-slate-50 p-4 text-center text-sm text-slate-500">
+              {exam.status === 'terjadwal' ? 'Ujian belum dibuka oleh guru.' : 'Ujian sudah ditutup — kamu tidak mengikuti ujian ini.'}
+            </p>
+          ) : (
+            <>
+              <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">{questions.length}</p><p className="text-[10px] font-semibold text-slate-500">Soal</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">{exam.duration_min} mnt</p><p className="text-[10px] font-semibold text-slate-500">Durasi</p></div>
+                <div className="rounded-xl bg-slate-50 p-3"><p className="font-display text-lg font-bold">Auto</p><p className="text-[10px] font-semibold text-slate-500">Grading</p></div>
+              </div>
+              <div className="mt-6 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
+                <p className="flex items-center gap-2 font-bold"><ShieldAlert className="h-4 w-4" /> Aturan Secure Exam</p>
+                <p>· Jawaban <b>disimpan otomatis</b> setiap 10 detik — aman jika koneksi terputus.</p>
+                <p>· Ujian berjalan dalam <b>mode layar penuh</b>; keluar dari layar penuh akan <b>mengunci ujian</b> sampai guru membuka kembali.</p>
+                <p>· Saat waktu habis, ujian <b>di-submit otomatis</b>.</p>
+              </div>
+              <Button className="mt-6 w-full" variant="success" disabled={starting} onClick={start}>
+                <Maximize className="h-4 w-4" /> {starting ? 'Memulai…' : 'Masuk Ruang Ujian (Layar Penuh)'}
+              </Button>
+            </>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  if (phase === 'locked') {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card>
+          <div className="text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-100">
+              <Lock className="h-8 w-8 text-rose-600" />
+            </div>
+            <h1 className="mt-3 font-display text-xl font-bold text-slate-900">Ujian Terkunci</h1>
+            <p className="mt-2 text-sm text-slate-500">Kamu keluar dari mode layar penuh. Jawabanmu tersimpan aman — tunggu guru membuka kembali ujian ini, atau lanjutkan sendiri di bawah setelah dibuka.</p>
           </div>
-          <div className="mt-6 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800">
-            <p className="flex items-center gap-2 font-bold"><ShieldAlert className="h-4 w-4" /> Aturan Secure Exam</p>
-            <p>· Jawaban <b>disimpan otomatis</b> setiap 10 detik — aman jika koneksi terputus.</p>
-            <p>· <b>Pindah tab / keluar layar terdeteksi</b> dan dicatat; ≥ 3× akan ditandai ke pengawas.</p>
-            <p>· Saat waktu habis, ujian <b>di-submit otomatis</b>.</p>
-            <p className="text-amber-600">· Proctoring webcam (fase lanjutan) memerlukan persetujuan orang tua untuk siswa di bawah umur.</p>
-          </div>
-          <Button className="mt-6 w-full" variant="success" onClick={start}>Masuk Ruang Ujian</Button>
+          <Button className="mt-6 w-full" onClick={resume}><Maximize className="h-4 w-4" /> Lanjutkan Ujian (Layar Penuh)</Button>
         </Card>
       </div>
     );
@@ -154,7 +281,7 @@ export default function ExamPlayer() {
               <div className="mt-3 space-y-2">
                 {q.options ? q.options.map(opt => (
                   <label key={opt} className={cn('flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition', answers[q.id] === opt ? 'border-violet-400 bg-violet-50 font-semibold text-violet-800' : 'border-slate-200 hover:border-violet-200')}>
-                    <input type="radio" name={q.id} checked={answers[q.id] === opt} onChange={() => setAnswers(a => ({ ...a, [q.id]: opt }))} className="accent-violet-600" />
+                    <input type="radio" name={String(q.id)} checked={answers[q.id] === opt} onChange={() => setAnswers(a => ({ ...a, [q.id]: opt }))} className="accent-violet-600" />
                     {opt}
                   </label>
                 )) : (
@@ -169,12 +296,12 @@ export default function ExamPlayer() {
           <Button variant="success" onClick={() => finish()}><Flag className="h-4 w-4" /> Submit Ujian</Button>
         </div>
 
-        <Modal open={warnOpen} onClose={() => setWarnOpen(false)} title="⚠️ Peringatan: Kamu keluar dari layar ujian">
+        <Modal open={warnOpen} onClose={() => setWarnOpen(false)} title="⚠️ Peringatan: Kamu berpindah tab">
           <p className="text-sm text-slate-600">
-            Sistem mendeteksi kamu <b>pindah tab / keluar dari layar ujian</b>. Kejadian ini <b>dicatat</b> dan terlihat oleh pengawas.
+            Sistem mendeteksi kamu <b>berpindah tab / menyembunyikan jendela ujian</b>. Kejadian ini <b>dicatat</b> dan terlihat oleh pengawas.
           </p>
           <div className="mt-3 rounded-xl bg-rose-50 p-3 text-xs text-rose-700">
-            Jumlah pelanggaran saat ini: <b>{tabSwitches}×</b> {tabSwitches >= 3 && '— kamu telah ditandai ke pengawas ujian!'}
+            Jumlah pelanggaran saat ini: <b>{tabSwitches}×</b>
           </div>
           <Button className="mt-4 w-full" onClick={() => setWarnOpen(false)}>Saya mengerti, lanjutkan ujian</Button>
         </Modal>
@@ -196,27 +323,9 @@ export default function ExamPlayer() {
             <Badge color="emerald"><Save className="h-3 w-3" /> Auto-save aktif selama ujian</Badge>
             <Badge color={tabSwitches ? 'rose' : 'emerald'}><ShieldAlert className="h-3 w-3" /> {tabSwitches}× pindah tab</Badge>
           </div>
+          <p className="mt-4 text-[11px] text-slate-400">Kunci jawaban tidak ditampilkan untuk ujian online (kebijakan keamanan CBT) — cuma nilai akhir.</p>
         </div>
       </Card>
-      <div className="mt-6 space-y-4">
-        <Card title="Rekap & Analisis Jawaban">
-          <div className="space-y-3">
-            {questions.map((q, i) => {
-              const correct = gradeQuestion(q, answers[q.id]);
-              return (
-                <div key={q.id} className="flex items-start gap-3 border-b border-slate-50 pb-3 last:border-0 last:pb-0">
-                  {correct ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-500" />}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-700">{i + 1}. {q.text}</p>
-                    <p className="mt-1 text-[11px] text-slate-500">Jawaban: <b>{answers[q.id] || '(kosong)'}</b> {!correct && <>· Kunci: <b className="text-emerald-700">{q.answer}</b></>}</p>
-                  </div>
-                  <Badge color={correct ? 'emerald' : 'rose'}>{correct ? `+${q.points}` : '0'}</Badge>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </div>
       <div className="mt-6 flex justify-center">
         <Link to="/ujian"><Button>Kembali ke Menu Ujian</Button></Link>
       </div>

@@ -317,6 +317,7 @@ class ExamController extends Controller
             'student_id' => $p->student_id,
             'student_name' => $p->student?->name,
             'status' => $p->status,
+            'answers' => $p->answers,
             'tab_switches' => $p->tab_switches,
             'score' => $p->score,
             'last_saved_at' => $p->last_saved_at?->toIso8601String(),

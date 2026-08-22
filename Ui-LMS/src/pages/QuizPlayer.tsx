@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ChevronLeft, Timer, Shuffle, CheckCircle2, XCircle, PenLine, Flag } from 'lucide-react';
-import { QUIZZES, QUESTIONS, COURSES, getMapel } from '../lib/data';
+import { ChevronLeft, Timer, CheckCircle2, XCircle, PenLine, Flag } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { api, ApiError } from '../lib/api';
 import { cn, fmtCountdown } from '../lib/utils';
 import { Badge, Button, Card, ProgressBar } from '../components/ui';
-import type { Question } from '../lib/types';
+
+interface ApiQuestion { id: number; type: 'pg' | 'tf' | 'isian' | 'essay'; text: string; options: string[] | null; points: number }
+interface ApiQuizDetail {
+  id: number; course_id: number; title: string; duration_min: number; max_attempts: number;
+  randomize: boolean; questions: ApiQuestion[]; attempts_used?: number;
+}
+interface ApiCourseRef { teaching_assignment: { subject: { name: string; color: string } } }
+interface ApiAttemptAnswer {
+  question_id: number; text: string; type: string; points: number; answer: string | null;
+  correct_answer: string | null; is_correct: boolean | null; essay_score: number | null;
+}
+interface ApiAttemptResult {
+  auto_score: number; max_auto: number; total_points: number; essay_pending_count: number;
+  final_score: number; answers: ApiAttemptAnswer[];
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -16,30 +30,28 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-
-export function gradeQuestion(q: Question, answer: string | undefined): boolean | null {
-  if (answer === undefined || answer === '') return false;
-  if (q.type === 'pg' || q.type === 'tf') return answer === q.answer;
-  if (q.type === 'isian') {
-    const ans = normalize(answer);
-    return normalize(q.answer) === ans || (q.keywords || []).some(k => ans.includes(normalize(k)));
-  }
-  return null; // essay → manual
-}
-
 export default function QuizPlayer() {
   const { id } = useParams();
-  const { user, quizAttempts, addQuizAttempt, toast } = useStore();
-  const quiz = QUIZZES.find(q => q.id === id);
+  const { toast } = useStore();
+  const [quiz, setQuiz] = useState<ApiQuizDetail | null>(null);
+  const [course, setCourse] = useState<ApiCourseRef | null>(null);
+  const [error, setError] = useState('');
   const [phase, setPhase] = useState<'intro' | 'run' | 'result'>('intro');
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [order, setOrder] = useState<Question[]>([]);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [order, setOrder] = useState<ApiQuestion[]>([]);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [result, setResult] = useState<{ autoScore: number; maxAuto: number; essayPending: number; total: number } | null>(null);
+  const [result, setResult] = useState<ApiAttemptResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const questions = useMemo(() => (quiz ? quiz.questionIds.map(qid => QUESTIONS.find(q => q.id === qid)!) : []), [quiz]);
-  const attempts = quizAttempts.filter(a => a.quizId === id);
+  useEffect(() => {
+    api.get<{ data: ApiQuizDetail }>(`/quizzes/${id}`)
+      .then(res => {
+        setQuiz(res.data);
+        return api.get<{ data: ApiCourseRef }>(`/courses/${res.data.course_id}`);
+      })
+      .then(res => setCourse(res.data))
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'));
+  }, [id]);
 
   useEffect(() => {
     if (phase !== 'run') return;
@@ -48,36 +60,37 @@ export default function QuizPlayer() {
   }, [phase]);
 
   useEffect(() => {
-    if (phase === 'run' && timeLeft <= 0) {
-      finish(true);
-    }
+    if (phase === 'run' && timeLeft <= 0) finish(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft, phase]);
 
-  if (!quiz || !user) return <div className="py-10 text-center text-sm text-slate-400">Quiz tidak ditemukan.</div>;
-  const course = COURSES.find(c => c.id === quiz.courseId)!;
-  const m = getMapel(course.mapelId);
+  const questions = useMemo(() => quiz?.questions ?? [], [quiz]);
+
+  if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
+  if (!quiz || !course) return <div className="py-10 text-center text-sm text-slate-400">Memuat quiz…</div>;
+  const m = course.teaching_assignment.subject;
+  const attemptsUsed = quiz.attempts_used ?? 0;
 
   const start = () => {
     setOrder(quiz.randomize ? shuffle(questions) : questions);
     setAnswers({});
-    setTimeLeft(quiz.durationMin * 60);
+    setTimeLeft(quiz.duration_min * 60);
     setPhase('run');
   };
 
-  const finish = (auto = false) => {
-    let autoScore = 0, maxAuto = 0, essayPending = 0, total = 0;
-    questions.forEach(q => {
-      total += q.points;
-      const res = gradeQuestion(q, answers[q.id]);
-      if (res === null) { essayPending++; return; }
-      maxAuto += q.points;
-      if (res) autoScore += q.points;
-    });
-    setResult({ autoScore, maxAuto, essayPending, total });
-    addQuizAttempt({ quizId: quiz.id, date: new Date().toISOString(), autoScore, maxAuto, essayPending, totalPoints: total });
-    setPhase('result');
-    if (auto) toast('Waktu habis — jawaban dikumpulkan otomatis', 'info');
+  const finish = async (auto = false) => {
+    setSubmitting(true);
+    try {
+      const res = await api.post<{ data: ApiAttemptResult }>(`/quizzes/${quiz.id}/attempts`, { answers });
+      setResult(res.data);
+      setPhase('result');
+      if (auto) toast('Waktu habis — jawaban dikumpulkan otomatis', 'info');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal mengumpulkan jawaban', 'error');
+      setPhase('intro');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (phase === 'intro') {
@@ -90,7 +103,7 @@ export default function QuizPlayer() {
               <PenLine className="h-7 w-7" />
             </div>
             <h1 className="mt-4 font-display text-xl font-bold text-slate-900">{quiz.title}</h1>
-            <p className="text-sm text-slate-500">{m.name} · {attempts.length}/{quiz.maxAttempts} percobaan terpakai</p>
+            <p className="text-sm text-slate-500">{m.name} · {attemptsUsed}/{quiz.max_attempts} percobaan terpakai</p>
           </div>
           <div className="mt-6 grid grid-cols-3 gap-3 text-center">
             <div className="rounded-xl bg-slate-50 p-3">
@@ -98,11 +111,11 @@ export default function QuizPlayer() {
               <p className="text-[10px] font-semibold text-slate-500">Soal</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-3">
-              <p className="font-display text-lg font-bold text-slate-900">{quiz.durationMin} mnt</p>
+              <p className="font-display text-lg font-bold text-slate-900">{quiz.duration_min} mnt</p>
               <p className="text-[10px] font-semibold text-slate-500">Timer</p>
             </div>
             <div className="rounded-xl bg-slate-50 p-3">
-              <p className="font-display text-lg font-bold text-slate-900">{quiz.maxAttempts}×</p>
+              <p className="font-display text-lg font-bold text-slate-900">{quiz.max_attempts}×</p>
               <p className="text-[10px] font-semibold text-slate-500">Batas percobaan</p>
             </div>
           </div>
@@ -112,8 +125,8 @@ export default function QuizPlayer() {
             {quiz.randomize && <li>· Urutan soal <b>diacak</b> setiap percobaan.</li>}
             <li>· Saat timer habis, jawaban dikumpulkan otomatis.</li>
           </ul>
-          <Button className="mt-6 w-full" onClick={start} disabled={attempts.length >= quiz.maxAttempts}>
-            {attempts.length >= quiz.maxAttempts ? 'Kesempatan habis' : 'Mulai Quiz'}
+          <Button className="mt-6 w-full" onClick={start} disabled={attemptsUsed >= quiz.max_attempts}>
+            {attemptsUsed >= quiz.max_attempts ? 'Kesempatan habis' : 'Mulai Quiz'}
           </Button>
         </Card>
       </div>
@@ -147,7 +160,7 @@ export default function QuizPlayer() {
               <div className="mt-3 space-y-2">
                 {(q.type === 'pg' || q.type === 'tf') && (q.options || []).map(opt => (
                   <label key={opt} className={cn('flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm transition', answers[q.id] === opt ? 'border-indigo-400 bg-indigo-50 font-semibold text-indigo-800' : 'border-slate-200 hover:border-indigo-200')}>
-                    <input type="radio" name={q.id} checked={answers[q.id] === opt} onChange={() => setAnswers(a => ({ ...a, [q.id]: opt }))} className="accent-indigo-600" />
+                    <input type="radio" name={String(q.id)} checked={answers[q.id] === opt} onChange={() => setAnswers(a => ({ ...a, [q.id]: opt }))} className="accent-indigo-600" />
                     {opt}
                   </label>
                 ))}
@@ -163,7 +176,7 @@ export default function QuizPlayer() {
         </div>
         <div className="mt-6 flex items-center justify-between">
           <p className="text-xs text-slate-500">{answered}/{order.length} terjawab</p>
-          <Button onClick={() => finish()}><Flag className="h-4 w-4" /> Kumpulkan Jawaban</Button>
+          <Button disabled={submitting} onClick={() => finish()}><Flag className="h-4 w-4" /> {submitting ? 'Mengirim…' : 'Kumpulkan Jawaban'}</Button>
         </div>
       </div>
     );
@@ -179,29 +192,26 @@ export default function QuizPlayer() {
             <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
           <h1 className="mt-3 font-display text-xl font-bold text-slate-900">Quiz Selesai!</h1>
-          <p className="font-display mt-2 text-3xl font-bold text-indigo-700">{r.autoScore}<span className="text-lg text-slate-400">/{r.maxAuto}</span></p>
+          <p className="font-display mt-2 text-3xl font-bold text-indigo-700">{r.auto_score}<span className="text-lg text-slate-400">/{r.max_auto}</span></p>
           <p className="text-xs text-slate-500">poin auto-grading (PG · Benar/Salah · Isian)</p>
-          {r.essayPending > 0 && <Badge color="amber" className="mt-3">{r.essayPending} essay menunggu penilaian guru</Badge>}
+          {r.essay_pending_count > 0 && <Badge color="amber" className="mt-3">{r.essay_pending_count} essay menunggu penilaian guru</Badge>}
         </div>
       </Card>
       <div className="mt-6 space-y-4">
-        {order.map((q, i) => {
-          const res = gradeQuestion(q, answers[q.id]);
-          return (
-            <Card key={q.id} className={cn(res === true && 'border-emerald-200', res === false && 'border-rose-200')}>
-              <div className="flex items-start gap-3">
-                {res === null ? <PenLine className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" /> : res ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" /> : <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />}
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-400">Soal {i + 1} · {q.points} poin</p>
-                  <p className="mt-1 text-sm font-medium text-slate-800">{q.text}</p>
-                  <p className="mt-2 text-xs">Jawabanmu: <b className={res ? 'text-emerald-700' : 'text-rose-700'}>{answers[q.id] || '(kosong)'}</b></p>
-                  {res !== null && !res && <p className="text-xs">Kunci: <b className="text-emerald-700">{q.answer}</b></p>}
-                  {res === null && <p className="text-xs text-amber-600">Menilai manual oleh guru{q.keywords ? '' : ''}</p>}
-                </div>
+        {r.answers.map((a, i) => (
+          <Card key={a.question_id} className={cn(a.is_correct === true && 'border-emerald-200', a.is_correct === false && 'border-rose-200')}>
+            <div className="flex items-start gap-3">
+              {a.is_correct === null ? <PenLine className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" /> : a.is_correct ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" /> : <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-slate-400">Soal {i + 1} · {a.points} poin</p>
+                <p className="mt-1 text-sm font-medium text-slate-800">{a.text}</p>
+                <p className="mt-2 text-xs">Jawabanmu: <b className={a.is_correct ? 'text-emerald-700' : 'text-rose-700'}>{a.answer || '(kosong)'}</b></p>
+                {a.is_correct !== null && !a.is_correct && <p className="text-xs">Kunci: <b className="text-emerald-700">{a.correct_answer}</b></p>}
+                {a.is_correct === null && <p className="text-xs text-amber-600">Menilai manual oleh guru{a.essay_score !== null && ` — nilai: ${a.essay_score}`}</p>}
               </div>
-            </Card>
-          );
-        })}
+            </div>
+          </Card>
+        ))}
       </div>
       <div className="mt-6 flex justify-center gap-3">
         <Link to="/ujian"><Button variant="secondary">Kembali ke Ujian & Quiz</Button></Link>
