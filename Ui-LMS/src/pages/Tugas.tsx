@@ -1,27 +1,75 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, Clock, Plus, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { COURSES, getMapel, getClass } from '../lib/data';
+import { ClipboardList, Clock, Plus, AlertTriangle } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { api, ApiError } from '../lib/api';
 import { fmtDate, daysUntil, isOverdue, cn } from '../lib/utils';
 import { Badge, Button, Card, Modal, PageHeader, inputCls } from '../components/ui';
 
+interface ApiCourse {
+  id: number;
+  teaching_assignment: { subject: { name: string; code: string; color: string }; school_class: { name: string } };
+}
+
+interface ApiAssignment {
+  id: number;
+  course_id: number;
+  title: string;
+  description: string | null;
+  deadline: string;
+  my_submission: { status: string; score: number | null } | null;
+}
+
+const isStaffRole = (role: string) => ['guru', 'walikelas', 'admin', 'superadmin', 'kepsek'].includes(role);
+
 export default function Tugas() {
-  const { user, assignments, toast } = useStore();
+  const { user, toast } = useStore();
+  const [courses, setCourses] = useState<ApiCourse[]>([]);
+  const [assignments, setAssignments] = useState<(ApiAssignment & { course: ApiCourse })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [courseId, setCourseId] = useState('c1');
+  const [courseId, setCourseId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const isStaff = user && ['guru', 'walikelas', 'admin', 'superadmin', 'kepsek'].includes(user.role);
-  const visible = assignments.filter(a => {
-    const c = COURSES.find(x => x.id === a.courseId)!;
-    if (!user) return false;
-    if (user.role === 'siswa') return c.classId === user.classId;
-    if (user.role === 'ortu') return c.classId === 'k3';
-    if (user.role === 'guru' || user.role === 'walikelas') return true;
-    return true;
-  });
+  const isStaff = !!user && isStaffRole(user.role);
+
+  const load = () => {
+    setLoading(true);
+    api.get<{ data: ApiCourse[] }>('/courses')
+      .then(async ({ data: cs }) => {
+        setCourses(cs);
+        setCourseId(prev => prev ?? cs[0]?.id ?? null);
+        const lists = await Promise.all(cs.map(c => api.get<{ data: ApiAssignment[] }>(`/courses/${c.id}/assignments`).then(r => r.data.map(a => ({ ...a, course: c })))));
+        setAssignments(lists.flat());
+      })
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  const createAssignment = async () => {
+    if (!title || !deadline || !courseId) return;
+    setSaving(true);
+    try {
+      await api.post(`/courses/${courseId}/assignments`, { title, deadline: deadline.replace('T', ' ') + ':00' });
+      toast('Tugas berhasil dibuat', 'success');
+      setCreateOpen(false);
+      setTitle('');
+      setDeadline('');
+      load();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal membuat tugas', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="py-10 text-center text-sm text-slate-400">Memuat tugas…</div>;
+  if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
 
   return (
     <div>
@@ -31,12 +79,10 @@ export default function Tugas() {
         action={isStaff ? <Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> Buat Tugas</Button> : undefined}
       />
       <div className="grid gap-4 md:grid-cols-2">
-        {visible.map(a => {
-          const c = COURSES.find(x => x.id === a.courseId)!;
-          const m = getMapel(c.mapelId);
-          const sub = a.submissions.find(s => s.studentId === user?.id);
-          const collected = a.submissions.filter(s => s.status !== 'belum').length;
+        {assignments.map(a => {
+          const m = a.course.teaching_assignment.subject;
           const overdue = isOverdue(a.deadline);
+          const sub = a.my_submission;
           return (
             <Link key={a.id} to={`/tugas/${a.id}`}>
               <Card className="h-full transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md">
@@ -44,25 +90,20 @@ export default function Tugas() {
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white" style={{ backgroundColor: m.color }}>{m.code}</div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold text-slate-900">{a.title}</p>
-                    <p className="text-xs text-slate-500">{m.name} · {getClass(c.classId).name}</p>
+                    <p className="text-xs text-slate-500">{m.name} · {a.course.teaching_assignment.school_class.name}</p>
                   </div>
-                  {user?.role === 'siswa' && sub ? (
+                  {!isStaff && sub && (
                     <Badge color={sub.status === 'dinilai' ? 'emerald' : sub.status === 'sudah' ? 'sky' : sub.status === 'revisi' ? 'amber' : overdue ? 'rose' : 'slate'}>
-                      {sub.status === 'dinilai' ? `Nilai ${sub.score}` : sub.status === 'sudah' ? 'Terkumpul' : sub.status === 'revisi' ? 'Revisi' : overdue ? 'Terlambat' : 'Belum'}
+                      {sub.status === 'dinilai' ? `Nilai ${sub.score}` : sub.status === 'sudah' ? 'Terkumpul' : sub.status === 'revisi' ? 'Revisi' : 'Belum'}
                     </Badge>
-                  ) : (
-                    <Badge color="indigo">{collected}/{a.submissions.length} kumpul</Badge>
                   )}
+                  {!isStaff && !sub && <Badge color={overdue ? 'rose' : 'slate'}>{overdue ? 'Terlambat' : 'Belum'}</Badge>}
                 </div>
-                <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">{a.description}</p>
+                {a.description && <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">{a.description}</p>}
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-50 pt-3">
                   <span className={cn('flex items-center gap-1 text-[11px] font-semibold', overdue ? 'text-rose-600' : 'text-slate-500')}>
                     <Clock className="h-3.5 w-3.5" /> {fmtDate(a.deadline)}
                     {!overdue && daysUntil(a.deadline) >= 0 && ` · ${daysUntil(a.deadline)} hari lagi`}
-                  </span>
-                  <span className="ml-auto flex items-center gap-2 text-[11px] text-slate-400">
-                    {a.attachments.length > 0 && <span className="flex items-center gap-1"><Upload className="h-3 w-3" /> {a.attachments.length} lampiran</span>}
-                    <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> rubrik</span>
                   </span>
                 </div>
               </Card>
@@ -79,28 +120,23 @@ export default function Tugas() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-600">Course</label>
-            <select className={inputCls} value={courseId} onChange={e => setCourseId(e.target.value)}>
-              {COURSES.map(c => <option key={c.id} value={c.id}>{getMapel(c.mapelId).name} — {getClass(c.classId).name}</option>)}
+            <select className={inputCls} value={courseId ?? ''} onChange={e => setCourseId(Number(e.target.value))}>
+              {courses.map(c => (
+                <option key={c.id} value={c.id}>{c.teaching_assignment.subject.name} — {c.teaching_assignment.school_class.name}</option>
+              ))}
             </select>
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold text-slate-600">Deadline</label>
             <input type="datetime-local" className={inputCls} value={deadline} onChange={e => setDeadline(e.target.value)} />
           </div>
-          <div className="rounded-xl bg-slate-50 p-3 text-[11px] text-slate-500">
-            <p className="font-bold text-slate-600">Fitur otomatis aktif:</p>
-            <p>· Pengumpulan online + attachment · Rubrik penilaian · Revisi & feedback · Status pengumpulan · Notifikasi deadline ke siswa & orang tua</p>
-          </div>
-          <Button className="w-full" disabled={!title || !deadline} onClick={() => {
-            setCreateOpen(false); setTitle(''); setDeadline('');
-            toast('Tugas berhasil dibuat & notifikasi dikirim ke siswa', 'success');
-          }}>
-            <ClipboardList className="h-4 w-4" /> Publikasikan Tugas
+          <Button className="w-full" disabled={!title || !deadline || saving} onClick={createAssignment}>
+            <ClipboardList className="h-4 w-4" /> {saving ? 'Menyimpan…' : 'Publikasikan Tugas'}
           </Button>
         </div>
       </Modal>
 
-      {visible.length === 0 && (
+      {assignments.length === 0 && (
         <Card><div className="py-8 text-center text-sm text-slate-400"><AlertTriangle className="mx-auto mb-2 h-6 w-6" />Belum ada tugas.</div></Card>
       )}
     </div>
