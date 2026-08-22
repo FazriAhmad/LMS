@@ -160,6 +160,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/exams/{exam}/progress', [ExamController::class, 'saveProgress']);
     Route::post('/exams/{exam}/submit', [ExamController::class, 'submit']);
     Route::get('/exams/{exam}/participants', [ExamController::class, 'participants']);
+    Route::post('/exams/{exam}/lock', [ExamController::class, 'lock']);
+    Route::post('/exam-participants/{examParticipant}/unlock', [ExamController::class, 'unlock']);
+    Route::post('/exam-participants/{examParticipant}/force-finish', [ExamController::class, 'forceFinish']);
 
     // Admin & Super Admin: kelola akun pengguna (User & Role — modul 03) dan data akademik.
     Route::middleware('role:superadmin|admin')->group(function () {

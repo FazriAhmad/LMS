@@ -235,6 +235,14 @@ Semua sudah di-push ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad
 - **Sudah teruji end-to-end**: login admin tanpa 2FA → `must_setup_2fa:true` → setup+confirm 2FA (kode TOTP dihitung manual, cocok) → login berikutnya wajib 2FA (`requires_2fa`) → kode salah ditolak (422) → kode benar berhasil → recovery code berhasil login sekali → recovery code sama dipakai lagi ditolak → aksi sensitif (buat akun+assign role, hapus akun, ubah nilai) semua otomatis tercatat di audit log dengan detail benar → guru non-admin dilarang lihat audit log (403)
 - **2FA superadmin di-reset ke nonaktif setelah testing** (biar sesi selanjutnya bisa login normal tanpa perlu kode TOTP) — kalau mau coba lagi, tinggal ulang alur setup di atas.
 
+### Modul 08 upgrade — Ujian Online: Kunci Fullscreen (permintaan user langsung, di luar PRD asli)
+- **Batasan teknis yang perlu dipahami**: website TIDAK BISA benar-benar mencegah siswa pindah tab/buka tab baru — browser sengaja tidak mengizinkan halaman web mengontrol itu. Yang bisa: Fullscreen API (minta browser masuk layar penuh) + deteksi kalau siswa KELUAR dari fullscreen (`fullscreenchange` event, ini kerjaan frontend, belum ada karena UI belum disambungkan). Backend di bawah ini menyediakan endpoint buat konsekuensi sisi server begitu frontend mendeteksi keluar fullscreen.
+- **Alur (permintaan user)**: siswa keluar fullscreen → status `ExamParticipant` jadi `terkunci` (BUKAN otomatis selesai) → siswa gak bisa autosave/submit lagi selama terkunci → guru pengampu/Admin/Super Admin pilih salah satu: **buka kunci** (`unlock`, siswa lanjut) atau **selesaikan paksa** (`force-finish`, dinilai dari jawaban terakhir yang ke-auto-save, gak perlu siswa submit ulang)
+- Endpoint: `POST /exams/{id}/lock` (siswa lapor sendiri), `POST /exam-participants/{id}/unlock`, `POST /exam-participants/{id}/force-finish` (keduanya guru pengampu/Admin/Super Admin)
+- Refactor kecil: logika hitung skor di `submit()` dipisah ke method `calculateScore()` biar dipakai bareng `forceFinish()` — gak nulis ulang.
+- **Sudah teruji end-to-end**: siswa mulai ujian → lock (keluar fullscreen) → autosave ditolak selama terkunci (403) → guru lihat status "terkunci" di monitoring → guru unlock → siswa lanjut autosave (sukses) → siswa lock lagi → guru force-finish pakai jawaban tersimpan terakhir (skor terhitung akurat, diverifikasi 100 buat jawaban benar) → siswa dilarang unlock diri sendiri (403) → guru dilarang unlock peserta yang statusnya bukan terkunci (422)
+- **Belum ada di frontend** (karena UI belum disambungkan ke backend sama sekali) — bagian yang perlu ditambahkan nanti: `requestFullscreen()` saat mulai ujian, listener `fullscreenchange` yang panggil `POST /exams/{id}/lock` begitu keluar, dan UI buat guru pilih unlock/force-finish dari layar monitoring.
+
 ## 🔑 Akun & Data yang Sudah Ada di Database
 
 Data ini nyata ada di DB `LMS` sekarang (bukan cuma dummy test yang dihapus lagi):

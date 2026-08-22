@@ -167,15 +167,7 @@ class ExamController extends Controller
             'tab_switches' => ['required', 'integer', 'min:0'],
         ]);
 
-        $earned = 0;
-        $total = 0;
-        foreach ($exam->questions as $question) {
-            $total += $question->points;
-            if ($question->grade($data['answers'][$question->id] ?? null)) {
-                $earned += $question->points;
-            }
-        }
-        $score = $total > 0 ? (int) round($earned / $total * 100) : 0;
+        $score = $this->calculateScore($exam, $data['answers']);
 
         $participant->update([
             'answers' => $data['answers'],
@@ -196,6 +188,59 @@ class ExamController extends Controller
         $participants = $exam->participants()->with('student:id,name')->get();
 
         return response()->json(['data' => $participants->map(fn (ExamParticipant $p) => $this->formatParticipant($p))]);
+    }
+
+    /**
+     * Siswa lapor keluar dari mode fullscreen selama ujian berlangsung — dikunci
+     * (bukan otomatis selesai), harus dibuka lagi oleh guru/admin (unlock) atau
+     * diselesaikan paksa (forceFinish) memakai jawaban terakhir yang ke-auto-save.
+     */
+    public function lock(Request $request, Exam $exam): JsonResponse
+    {
+        $participant = $this->ownRunningParticipant($request, $exam);
+        $participant->update(['status' => 'terkunci']);
+
+        return response()->json(['data' => $this->formatParticipant($participant)]);
+    }
+
+    /** Guru pengampu/Admin buka kembali siswa yang terkunci — siswa lanjut mengerjakan. */
+    public function unlock(Request $request, ExamParticipant $examParticipant): JsonResponse
+    {
+        $this->authorizeTeacher($request, $examParticipant->exam->course);
+        if ($examParticipant->status !== 'terkunci') {
+            throw ValidationException::withMessages(['status' => ['Peserta ini tidak sedang terkunci.']]);
+        }
+        $examParticipant->update(['status' => 'sedang']);
+
+        return response()->json(['data' => $this->formatParticipant($examParticipant)]);
+    }
+
+    /** Guru pengampu/Admin selesaikan paksa — dinilai dari jawaban terakhir yang tersimpan (auto-save). */
+    public function forceFinish(Request $request, ExamParticipant $examParticipant): JsonResponse
+    {
+        $this->authorizeTeacher($request, $examParticipant->exam->course);
+        if (! in_array($examParticipant->status, ['terkunci', 'sedang'], true)) {
+            throw ValidationException::withMessages(['status' => ['Peserta ini tidak sedang mengerjakan atau terkunci.']]);
+        }
+
+        $score = $this->calculateScore($examParticipant->exam, $examParticipant->answers ?? []);
+        $examParticipant->update(['status' => 'selesai', 'score' => $score, 'submitted_at' => now()]);
+
+        return response()->json(['data' => $this->formatParticipant($examParticipant)]);
+    }
+
+    private function calculateScore(Exam $exam, array $answers): int
+    {
+        $earned = 0;
+        $total = 0;
+        foreach ($exam->questions as $question) {
+            $total += $question->points;
+            if ($question->grade($answers[$question->id] ?? null)) {
+                $earned += $question->points;
+            }
+        }
+
+        return $total > 0 ? (int) round($earned / $total * 100) : 0;
     }
 
     private function ownRunningParticipant(Request $request, Exam $exam): ExamParticipant

@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('exam_id')->constrained('exams')->cascadeOnDelete();
             $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
-            $table->string('status')->default('belum'); // belum, sedang, selesai
+            $table->string('status')->default('belum'); // belum, sedang, terkunci (keluar fullscreen), selesai
             $table->json('answers')->nullable(); // draft jawaban, ditimpa tiap auto-save
             $table->unsignedInteger('tab_switches')->default(0);
             $table->unsignedTinyInteger('score')->nullable();
