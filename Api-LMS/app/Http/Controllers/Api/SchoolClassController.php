@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\SchoolClass;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -20,11 +21,15 @@ class SchoolClassController extends Controller
         if ($previousTeacherId && $previousTeacherId !== $newTeacherId) {
             $stillHomeroom = SchoolClass::where('homeroom_teacher_id', $previousTeacherId)->exists();
             if (! $stillHomeroom) {
-                User::find($previousTeacherId)?->removeRole('walikelas');
+                if ($prevUser = User::find($previousTeacherId)) {
+                    $prevUser->removeRole('walikelas');
+                    AuditLog::record('role_removed', $prevUser, ['role' => 'walikelas']);
+                }
             }
         }
-        if ($newTeacherId) {
-            User::find($newTeacherId)?->assignRole('walikelas');
+        if ($newTeacherId && ($newUser = User::find($newTeacherId))) {
+            $newUser->assignRole('walikelas');
+            AuditLog::record('role_assigned', $newUser, ['role' => 'walikelas']);
         }
     }
 

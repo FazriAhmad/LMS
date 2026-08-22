@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Storage;
 
 class SchoolSetting extends Model
 {
-    protected $fillable = ['name', 'short_name', 'npsn', 'address', 'email', 'phone', 'logo_path'];
+    protected $fillable = ['name', 'short_name', 'npsn', 'address', 'email', 'phone', 'logo_path', 'storage_quota_mb'];
 
     /** Singleton — selalu baris id=1, dibuat otomatis kalau belum ada. */
     public static function current(): self

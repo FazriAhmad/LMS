@@ -42,7 +42,7 @@ C:\Users\Fazri\portofolio\LMS\
 - Package: `laravel/sanctum` (auth token), `spatie/laravel-permission` (role, guard `web`)
 - Launch config belum ditambahkan ke `.claude/launch.json` — kalau mau preview, jalanin manual: `php artisan serve --host=127.0.0.1 --port=8010` dari folder `Api-LMS` (pakai port 8010, BUKAN 8000, karena project lain di portofolio ini sering nyangkut/rebutan port 8000 — lihat catatan "Hati-hati Port" di bawah)
 
-## ✅ Progress Backend (16/19 modul + 1 upgrade — FASE 1 & FASE 2 SELESAI, semua teruji end-to-end)
+## ✅ Progress Backend (16/19 modul + 4 upgrade — FASE 1, 2 & sebagian FASE 3 SELESAI, semua teruji end-to-end)
 
 ### Modul 03 — User & Role
 - Login (username, bukan email — keputusan produk karena siswa SD/SMP belum tentu punya email), 7 role via Spatie
@@ -206,7 +206,34 @@ PRD dibuka & dibaca lengkap (bukan tebakan) — daftar modul per fase dari secti
 
 Semua sudah di-push ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS), branch `main`.
 
-**Fase 3** (belum dikerjakan sama sekali, sengaja — butuh keputusan kebijakan/kematangan operasional dulu): proctoring webcam (+ konsen ortu), QR attendance dinamis, storage monitoring, AI-assisted essay scoring, 2FA & audit log diperluas.
+**Fase 3 — progress (checkpoint 2026-08-22):**
+- ✅ QR Attendance dinamis (modul 11 upgrade) — selesai
+- ✅ Storage Monitoring (modul 17 upgrade) — selesai
+- ✅ 2FA & Audit Log (modul 18 upgrade) — selesai
+- ⬜ Proctoring webcam — **di-skip atas keputusan user** ("skip dulu, kerjakan yang lain")
+- ⬜ AI-assisted essay scoring — **di-skip atas keputusan user** (butuh API key/biaya provider AI eksternal, bukan wewenang saya putuskan sendiri)
+
+### Modul 11 upgrade — QR Attendance Dinamis
+- `qr_attendance_sessions`: wali kelas/Admin buka sesi (default berlaku 10 menit), server generate `secret` random 40 karakter yang **tidak pernah dikirim ke client** — cuma kode turunannya
+- **Kode dihitung, bukan disimpan per-rotasi**: `kode = HMAC-SHA256(secret, floor(waktu/30)) dipotong 6 karakter` — jadi tidak perlu job/cron buat generate kode baru tiap 30 detik, tinggal dihitung ulang tiap kali di-request. Toleransi 1 jendela ke belakang buat jeda scan/network.
+- Endpoint: `POST /school-classes/{id}/qr-attendance` (buka sesi), `GET /qr-attendance/{id}` (kode saat ini + sisa detik — dipoll layar guru), `POST /qr-attendance/{id}/scan` (siswa submit kode, otomatis bikin/update `Attendance` status H hari itu, `notes: "Scan QR"`)
+- **Beda dari referensi `Ui-LMS`**: di sana kode QR pure random client-side yang gak pernah divalidasi server (screenshot lama tetap "valid" selamanya di mata UI). Di sini kode benar-benar rotate & diverifikasi server — screenshot kode basi otomatis ditolak begitu jendela 30 detik lewat.
+- **Sudah teruji end-to-end**: buka sesi → kode konsisten dalam jendela yang sama → siswa scan kode salah (422) → scan kode benar → presensi H tercatat otomatis dgn notes "Scan QR" → **tunggu 35 detik nyata, verifikasi kode BENERAN berubah** (bukan cuma dicek logikanya) → kode jendela sebelumnya masih diterima (toleransi) → siswa dilarang buka sesi (403)
+
+### Modul 17 upgrade — Storage Monitoring
+- `school_settings.storage_quota_mb` (default 5120 = 5GB, bisa diubah Admin). `GET /storage/usage` hitung total dari kolom `file_size` yang sudah ditrack Materi & Pengumpulan Tugas + `size` dari JSON lampiran Tugas — **bukan scan filesystem** (lambat kalau file banyak)
+- Breakdown per kategori (materi/pengumpulan tugas/lampiran tugas) + `percent_used` + flag `warning` (≥80%)
+- **Sudah teruji end-to-end**: upload materi 1MB nyata → `used_mb: 1`, `percent_used` akurat sesuai kuota → validasi kuota minimum ditolak → siswa dilarang akses (403)
+
+### Modul 18 upgrade — 2FA & Audit Log Diperluas
+- **2FA: TOTP (RFC 6238) native**, bukan Laravel Fortify — Fortify itu paket auth berbasis session/views yang arsitekturnya beda dari API token (Sanctum) kita, motong yang gak perlu. Implementasi `app/Support/Totp.php` (~100 baris, HMAC-SHA1 + base32, stdlib PHP doang) **diverifikasi cocok persis dengan test vector resmi RFC 6238** (kunci `"12345678901234567890"`, T=59 → kode `287082`) — jadi kompatibel dengan Google Authenticator/Authy sungguhan, bukan skema custom yang cuma konsisten sama dirinya sendiri. Ada test permanen di `tests/Unit/TotpTest.php`.
+- Alur: `POST /2fa/setup` (generate secret + otpauth URL buat QR code) → `POST /2fa/confirm` (verifikasi kode pertama, baru aktif, dapat 8 recovery code sekali-pakai di-hash) → login selanjutnya balikin `{requires_2fa:true, challenge}` bukan token langsung → `POST /login/verify-2fa` (kode TOTP atau recovery code) baru keluarin token asli. Challenge disimpan di cache (5 menit) bukan tabel.
+- **Wajib buat Super Admin/Admin di-soft-enforce**: field `must_setup_2fa` muncul di response login kalau role admin/superadmin belum aktifkan 2FA — tetap bisa login (gak dikunci total), tapi frontend "disuruh" paksa ke halaman setup. Keputusan sadar: hard-lock berisiko mengunci akun testing/produksi tanpa jalan keluar kalau ada masalah setup.
+- **Audit log dipasang lewat model event di SATU tempat** (`AppServiceProvider::boot()`), bukan ditambal manual ke tiap `->update()`/`->destroy()` di 15+ controller — auto-cover semua `deleted` pada model akademik inti (User, SchoolClass, Subject, TeachingAssignment, Course, Assignment, Quiz, Exam, Question, ScheduleItem, AcademicYear) dan `updated` pada Grade & User. Perubahan role (`assignRole`/`removeRole`) diaudit manual di 3 titik (`UserController`, `AuthController::register`, `SchoolClassController` sinkronisasi walikelas) karena itu tabel pivot Spatie, gak lewat event model User langsung.
+- **Kolom sensitif di-redact eksplisit dari log** (`password`, `two_factor_secret`, `two_factor_recovery_codes`) — ditemukan & diperbaiki SEBELUM sempat bocor lewat testing manual, bukan insiden nyata: waktu nulis hook awal saya sadar `getChanges()` bakal ikut nyeret secret TOTP mentah ke `audit_logs.changes` kalau gak di-exclude.
+- `GET /audit-logs` (Admin/Super Admin, filter `model`/`action`/`user_id`)
+- **Sudah teruji end-to-end**: login admin tanpa 2FA → `must_setup_2fa:true` → setup+confirm 2FA (kode TOTP dihitung manual, cocok) → login berikutnya wajib 2FA (`requires_2fa`) → kode salah ditolak (422) → kode benar berhasil → recovery code berhasil login sekali → recovery code sama dipakai lagi ditolak → aksi sensitif (buat akun+assign role, hapus akun, ubah nilai) semua otomatis tercatat di audit log dengan detail benar → guru non-admin dilarang lihat audit log (403)
+- **2FA superadmin di-reset ke nonaktif setelah testing** (biar sesi selanjutnya bisa login normal tanpa perlu kode TOTP) — kalau mau coba lagi, tinggal ulang alur setup di atas.
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 

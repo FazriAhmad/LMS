@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AcademicYearController;
 use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
+use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
@@ -15,26 +16,40 @@ use App\Http\Controllers\Api\MajorController;
 use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\ProgressController;
+use App\Http\Controllers\Api\QrAttendanceController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\QuizController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScheduleItemController;
 use App\Http\Controllers\Api\SchoolClassController;
 use App\Http\Controllers\Api\SchoolSettingController;
+use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TeacherNoteController;
 use App\Http\Controllers\Api\TeachingAssignmentController;
+use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login/verify-2fa', [AuthController::class, 'verifyTwoFactor']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/school-setting', [SchoolSettingController::class, 'show']);
     Route::post('/school-setting', [SchoolSettingController::class, 'update']);
+    Route::get('/storage/usage', [StorageController::class, 'usage']);
+    Route::put('/storage/quota', [StorageController::class, 'updateQuota']);
+
+    // 2FA (modul 18, wajib untuk Super Admin/Admin — lihat AuthController::login untuk soft-enforce).
+    Route::post('/2fa/setup', [TwoFactorController::class, 'setup']);
+    Route::post('/2fa/confirm', [TwoFactorController::class, 'confirm']);
+    Route::post('/2fa/disable', [TwoFactorController::class, 'disable']);
+
+    // Audit log (modul 18) — otomatis terisi lewat model event, lihat AppServiceProvider.
+    Route::get('/audit-logs', [AuditLogController::class, 'index']);
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::post('/change-password', [AuthController::class, 'changePassword']);
 
@@ -77,6 +92,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/school-classes/{schoolClass}/attendance', [AttendanceController::class, 'index']);
     Route::post('/school-classes/{schoolClass}/attendance', [AttendanceController::class, 'store']);
     Route::get('/attendance/summary', [AttendanceController::class, 'summary']);
+    Route::post('/school-classes/{schoolClass}/qr-attendance', [QrAttendanceController::class, 'store']);
+    Route::get('/qr-attendance/{qrAttendanceSession}', [QrAttendanceController::class, 'show']);
+    Route::post('/qr-attendance/{qrAttendanceSession}/scan', [QrAttendanceController::class, 'scan']);
 
     // Penilaian (modul 10) — otorisasi guru pengampu/Admin ditegakkan di controller.
     Route::get('/courses/{course}/grades', [GradeController::class, 'index']);

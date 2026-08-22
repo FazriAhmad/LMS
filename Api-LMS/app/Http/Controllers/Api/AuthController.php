@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\Totp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -35,6 +39,7 @@ class AuthController extends Controller
             'status' => 'pending',
         ]);
         $user->assignRole($data['role']);
+        AuditLog::record('role_assigned', $user, ['role' => $data['role'], 'via' => 'self-register']);
 
         return response()->json([
             'message' => 'Registrasi berhasil. Akun Anda menunggu persetujuan Admin sebelum bisa digunakan.',
@@ -68,12 +73,60 @@ class AuthController extends Controller
             ]);
         }
 
+        if ($user->hasTwoFactorEnabled()) {
+            $challenge = Str::random(40);
+            Cache::put("2fa-challenge:{$challenge}", $user->id, now()->addMinutes(5));
+
+            return response()->json(['requires_2fa' => true, 'challenge' => $challenge]);
+        }
+
         $token = $user->createToken('api')->plainTextToken;
 
         return response()->json([
             'user' => $this->formatUser($user),
             'token' => $token,
+            // Super Admin/Admin wajib 2FA (PRD modul 18) — soft-enforce: tetap bisa login,
+            // tapi frontend disuruh paksa ke halaman setup 2FA sampai diaktifkan.
+            'must_setup_2fa' => $user->hasAnyRole(['superadmin', 'admin']) && ! $user->hasTwoFactorEnabled(),
         ]);
+    }
+
+    /** Langkah kedua login kalau akun sudah aktifkan 2FA — verifikasi kode TOTP atau recovery code. */
+    public function verifyTwoFactor(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge' => ['required', 'string'],
+            'code' => ['required_without:recovery_code', 'nullable', 'string'],
+            'recovery_code' => ['required_without:code', 'nullable', 'string'],
+        ]);
+
+        $userId = Cache::get("2fa-challenge:{$data['challenge']}");
+        if (! $userId) {
+            throw ValidationException::withMessages(['challenge' => ['Sesi login kedaluwarsa, silakan login ulang.']]);
+        }
+
+        $user = User::findOrFail($userId);
+        $verified = false;
+
+        if (! empty($data['code'])) {
+            $verified = Totp::verify($user->two_factor_secret, $data['code']);
+        } elseif (! empty($data['recovery_code'])) {
+            $codes = collect($user->two_factor_recovery_codes ?? []);
+            $matchIndex = $codes->search(fn ($hashed) => Hash::check($data['recovery_code'], $hashed));
+            if ($matchIndex !== false) {
+                $verified = true;
+                $user->forceFill(['two_factor_recovery_codes' => $codes->forget($matchIndex)->values()->all()])->save();
+            }
+        }
+
+        if (! $verified) {
+            throw ValidationException::withMessages(['code' => ['Kode 2FA tidak valid.']]);
+        }
+
+        Cache::forget("2fa-challenge:{$data['challenge']}");
+        $token = $user->createToken('api')->plainTextToken;
+
+        return response()->json(['user' => $this->formatUser($user), 'token' => $token]);
     }
 
     public function logout(Request $request): JsonResponse

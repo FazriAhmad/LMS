@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -65,6 +66,7 @@ class UserController extends Controller
                 'status' => 'approved',
             ]);
             $user->assignRole($data['role']);
+            AuditLog::record('role_assigned', $user, ['role' => $data['role']]);
 
             if ($data['role'] === 'siswa') {
                 StudentProfile::create([
