@@ -1,10 +1,30 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-21, update ke-2)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23)
 
-> File ini dipakai sebagai checkpoint lintas-sesi. Ditulis karena context window sesi sebelumnya sudah ~90% — lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
+> File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
+
+## 🗺️ RINGKASAN CEPAT — sudah & belum (baca ini dulu)
+
+**Backend (`Api-LMS`) — HAMPIR SELESAI:**
+- ✅ Fase 1 PRD: 8/8 modul selesai
+- ✅ Fase 2 PRD: 8/8 modul yang applicable selesai (1 dipersempit scope-nya atas keputusan user: Komunikasi → Forum saja)
+- 🟡 Fase 3 PRD: 3/5 area selesai (QR Attendance, Storage Monitoring, 2FA & Audit Log) + 1 fitur tambahan di luar PRD (kunci fullscreen ujian). **2 area sengaja di-skip**: proctoring webcam & AI essay scoring (keputusan user).
+- Total: **16 dari 19 modul PRD** dikerjakan. Sisa murni Fase 3 yang di-skip.
+
+**Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
+- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal**
+- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan
+- Strategi: satu halaman per satu waktu (keputusan user), halaman yang belum kebagian giliran tetap tampil pakai data dummy seperti biasa — itu bukan bug.
+- Detail lengkap tiap halaman yang sudah disambungkan (endpoint dipakai, cara verifikasi, penyederhanaan yang diambil) ada di bagian **🔌 Menyambungkan Ui-LMS ke Api-LMS** di bawah.
+
+**Bug/perbaikan penting sesi ini:** timezone Laravel hardcode UTC (semua jam geser 7 jam dari WIB) — sudah diperbaiki 2026-08-23, lihat poin 7 di bagian ⚠️ Catatan Penting.
+
+Semua progress sudah di-commit & push ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS), branch `main`.
+
+---
 
 ## Ringkasan Proyek
 
-LMS sekolah multi-peran (Admin, Kepala Sekolah, Guru, Wali Kelas, Siswa, Orang Tua, Super Admin) — dikerjakan lewat 3 tahap: PRD → referensi UI (sudah ada) → backend Laravel (sedang dibangun step-by-step sesuai urutan PRD Fase 1).
+LMS sekolah multi-peran (Admin, Kepala Sekolah, Guru, Wali Kelas, Siswa, Orang Tua, Super Admin) — dikerjakan lewat 3 tahap: PRD → referensi UI (sudah ada) → backend Laravel (selesai) → sambungkan UI ke backend (sedang berjalan, bertahap per halaman).
 
 ## 📄 PRD
 
@@ -304,9 +324,10 @@ Akademik, Kurikulum, Kalender, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer
 
 ## Kalau Lanjut Sesi Baru
 
-1. Baca file ini dulu.
+1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
-3. **Fase 1 & Fase 2 backend sudah selesai semua** (16/19 modul PRD). **Fase 3**: 3 dari 5 area selesai (QR Attendance, Storage Monitoring, 2FA & Audit Log) + fitur tambahan kunci fullscreen ujian; proctoring webcam & AI essay scoring di-skip atas keputusan user.
-4. **Penyambungan Ui-LMS↔Api-LMS SEDANG BERJALAN** (lihat 🔌 di atas) — baru Login+Dashboard, 18 halaman lain masih mock. Ini kemungkinan besar kerjaan lanjutan sesi berikutnya — tanya user mau lanjut ke halaman mana.
+3. **Backend selesai** (16/19 modul PRD — Fase 1 & 2 penuh, Fase 3 sebagian). Sisa Fase 3 yang di-skip (proctoring webcam, AI essay scoring) **jangan dikerjakan tanpa tanya user dulu** — itu keputusan sadar, bukan celah yang lupa digarap.
+4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 6 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
 5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
 6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.
+7. **Pola kerja tiap halaman yang disambungkan** (ikuti ini biar konsisten): baca halaman mock-nya dulu penuh → cek endpoint backend yang relevan (controller-nya, bukan nebak) → tulis ulang halaman pakai `api.ts` → `npx tsc --noEmit` → nyalakan backend (port 8010) + preview UI (port 5173) → login & klik beneran lewat browser tool, jangan cuma percaya kompilasi sukses → bersihkan data test → update STATUS.md → commit & push.
