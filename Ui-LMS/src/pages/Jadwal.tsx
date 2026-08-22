@@ -1,77 +1,121 @@
-import { useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, Clock, DoorOpen } from 'lucide-react';
-import { SCHEDULE, EXAMS, CLASSES, getMapel, getClass, getTeacherName } from '../lib/data';
+import { useEffect, useState } from 'react';
+import { CalendarClock, Clock, DoorOpen } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { cn, DAYS, detectConflicts, fmtDate, fmtTime } from '../lib/utils';
+import { api, ApiError } from '../lib/api';
+import { cn, DAYS, fmtDate, fmtTime } from '../lib/utils';
 import { Badge, Card, PageHeader, Tabs } from '../components/ui';
+
+interface ScheduleItem {
+  id: number;
+  day: number;
+  start_time: string;
+  end_time: string;
+  room: string | null;
+  teaching_assignment: { teacher: { name: string }; subject: { name: string; color: string } };
+}
+interface ParentScheduleItem { day: number; subject_name: string; teacher_name: string; start_time: string; end_time: string; room: string | null }
+interface ApiCourse { id: number; teaching_assignment: { subject: { name: string }; school_class: { name: string } } }
+interface ApiExam { id: number; title: string; type: string; scheduled_at: string; duration_min: number; status: string }
+interface SchoolClassRow { id: number; name: string; homeroom_teacher_id: number | null }
+
+const isStaffRole = (role: string) => ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas'].includes(role);
 
 export default function Jadwal() {
   const { user } = useStore();
-  const isStaff = user && ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas'].includes(user.role);
-  const [tab, setTab] = useState(isStaff ? 'kelas' : 'jadwal');
-  const [classId, setClassId] = useState(user?.classId || user?.homeroomClassId || 'k3');
+  if (!user) return null;
+  const isStaff = isStaffRole(user.role);
 
-  const items = useMemo(() => {
-    if (!user) return [];
-    if (user.role === 'siswa') return SCHEDULE.filter(s => s.classId === user.classId);
-    if (user.role === 'guru' || user.role === 'walikelas') {
-      return tab === 'guru' ? SCHEDULE.filter(s => s.teacherId === user.id) : SCHEDULE.filter(s => s.classId === classId);
+  const [tab, setTab] = useState(user.role === 'ortu' ? 'jadwal' : isStaff ? 'kelas' : 'jadwal');
+  const [classes, setClasses] = useState<SchoolClassRow[]>([]);
+  const [classId, setClassId] = useState<number | null>(null);
+  const [items, setItems] = useState<(ScheduleItem | ParentScheduleItem)[]>([]);
+  const [exams, setExams] = useState<(ApiExam & { course: ApiCourse })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isStaff) {
+      api.get<{ data: SchoolClassRow[] }>('/school-classes')
+        .then(res => {
+          setClasses(res.data);
+          const mine = res.data.find(c => String(c.homeroom_teacher_id) === user.id);
+          setClassId((mine ?? res.data[0])?.id ?? null);
+        })
+        .catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'));
     }
-    return SCHEDULE.filter(s => s.classId === classId);
-  }, [user, tab, classId]);
+  }, [isStaff, user.id]);
 
-  const conflicts = useMemo(() => detectConflicts(SCHEDULE), []);
-  const relevantConflicts = conflicts.filter(c =>
-    user?.role === 'siswa' ? c.a.classId === user.classId || c.b.classId === user.classId : true
-  );
+  useEffect(() => {
+    setLoading(true);
+    setError('');
+    const loadSchedule = async () => {
+      if (user.role === 'ortu') {
+        const children = await api.get<{ data: { student_id: number }[] }>('/parent/children');
+        const child = children.data[0];
+        if (!child) { setItems([]); return; }
+        const res = await api.get<{ data: ParentScheduleItem[] }>(`/parent/schedule?student_id=${child.student_id}`);
+        setItems(res.data);
+        return;
+      }
+      if (tab === 'guru') {
+        const res = await api.get<{ data: ScheduleItem[] }>('/schedule-items');
+        setItems(res.data);
+        return;
+      }
+      if (isStaff && classId) {
+        const res = await api.get<{ data: ScheduleItem[] }>(`/schedule-items?school_class_id=${classId}`);
+        setItems(res.data);
+        return;
+      }
+      if (!isStaff) {
+        const res = await api.get<{ data: ScheduleItem[] }>('/schedule-items');
+        setItems(res.data);
+      }
+    };
+    const loadExams = async () => {
+      const courses = await api.get<{ data: ApiCourse[] }>('/courses');
+      const lists = await Promise.all(courses.data.map(c => api.get<{ data: ApiExam[] }>(`/courses/${c.id}/exams`).then(r => r.data.map(e => ({ ...e, course: c })))));
+      setExams(lists.flat());
+    };
 
-  const tabs = user?.role === 'siswa'
+    (tab === 'ujian' ? loadExams() : loadSchedule())
+      .catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'))
+      .finally(() => setLoading(false));
+  }, [tab, classId, isStaff, user.role]);
+
+  const tabs = user.role === 'siswa'
     ? [{ id: 'jadwal', label: 'Jadwal Saya' }, { id: 'ujian', label: 'Jadwal Ujian' }]
-    : user?.role === 'ortu'
-      ? [{ id: 'jadwal', label: 'Jadwal Anak' }, { id: 'ujian', label: 'Jadwal Ujian' }]
+    : user.role === 'ortu'
+      ? [{ id: 'jadwal', label: 'Jadwal Anak' }]
       : [
           { id: 'kelas', label: 'Jadwal Kelas' },
-          ...(user && (user.role === 'guru' || user.role === 'walikelas') ? [{ id: 'guru', label: 'Jadwal Mengajar Saya' }] : []),
+          ...(user.role === 'guru' || user.role === 'walikelas' ? [{ id: 'guru', label: 'Jadwal Mengajar Saya' }] : []),
           { id: 'ujian', label: 'Jadwal Ujian' },
         ];
+
+  if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
 
   return (
     <div>
       <PageHeader
         title="Jadwal"
-        desc="Jadwal siswa, guru, kelas, dan ujian — dengan deteksi bentrok otomatis"
+        desc="Jadwal siswa, guru, kelas, dan ujian — bentrok jadwal dicegah otomatis oleh server saat jadwal dibuat"
         action={
-          tab !== 'ujian' && (isStaff || user?.role === 'ortu') ? (
-            <select value={classId} onChange={e => setClassId(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-indigo-500">
-              {CLASSES.map(c => <option key={c.id} value={c.id}>Kelas {c.name}</option>)}
+          tab === 'kelas' && isStaff ? (
+            <select value={classId ?? ''} onChange={e => setClassId(Number(e.target.value))} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-indigo-500">
+              {classes.map(c => <option key={c.id} value={c.id}>Kelas {c.name}</option>)}
             </select>
           ) : undefined
         }
       />
 
-      {relevantConflicts.length > 0 && tab !== 'ujian' && (
-        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 p-4">
-          <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
-            <AlertTriangle className="h-4 w-4" /> Terdeteksi {relevantConflicts.length} bentrok jadwal
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {relevantConflicts.map((c, i) => (
-              <li key={i} className="text-xs text-amber-700">
-                <b>{DAYS[c.a.day]}</b> · {getMapel(c.a.mapelId).name} ({c.a.start}–{c.a.end}, {getClass(c.a.classId).name})
-                bertabrakan dengan <b>{getMapel(c.b.mapelId).name}</b> ({c.b.start}–{c.b.end}, {getClass(c.b.classId).name})
-                {c.kind === 'guru' && <> — guru <b>{getTeacherName(c.a.teacherId)}</b> terjadwal di dua kelas</>}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-[11px] text-amber-600">Sistem mendeteksi overlap otomatis berdasarkan waktu, kelas, dan guru. Perbaiki melalui menu Manajemen Akademik.</p>
-        </div>
-      )}
-
       <div className="mb-6"><Tabs tabs={tabs} active={tab} onChange={setTab} /></div>
 
-      {tab === 'ujian' ? (
+      {loading ? (
+        <div className="py-10 text-center text-sm text-slate-400">Memuat jadwal…</div>
+      ) : tab === 'ujian' ? (
         <div className="space-y-3">
-          {EXAMS.map(e => (
+          {exams.map(e => (
             <Card key={e.id}>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
@@ -80,7 +124,7 @@ export default function Jadwal() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-bold text-slate-900">{e.title}</p>
                   <p className="text-xs text-slate-500">
-                    {e.type} · Kelas {getClass(e.classId).name} · {fmtDate(e.date)} {fmtTime(e.date)} · durasi {e.durationMin} menit
+                    {e.type} · {e.course.teaching_assignment.subject.name} · {e.course.teaching_assignment.school_class.name} · {fmtDate(e.scheduled_at)} {fmtTime(e.scheduled_at)} · durasi {e.duration_min} menit
                   </p>
                 </div>
                 <Badge color={e.status === 'aktif' ? 'emerald' : e.status === 'selesai' ? 'slate' : 'sky'}>
@@ -89,11 +133,12 @@ export default function Jadwal() {
               </div>
             </Card>
           ))}
+          {exams.length === 0 && <Card><p className="py-8 text-center text-sm text-slate-400">Belum ada ujian terjadwal.</p></Card>}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-5">
           {DAYS.map((dayName, d) => {
-            const dayItems = items.filter(s => s.day === d).sort((a, b) => a.start.localeCompare(b.start));
+            const dayItems = items.filter(s => s.day === d).sort((a, b) => a.start_time.localeCompare(b.start_time));
             const isToday = (new Date().getDay() + 6) % 7 === d;
             return (
               <div key={dayName} className={cn('rounded-2xl border bg-white p-3 shadow-sm', isToday ? 'border-indigo-300 ring-2 ring-indigo-100' : 'border-slate-200')}>
@@ -104,15 +149,16 @@ export default function Jadwal() {
                 <div className="space-y-2">
                   {dayItems.length === 0 && <p className="px-1 py-4 text-center text-[11px] text-slate-300">Tidak ada jadwal</p>}
                   {dayItems.map(s => {
-                    const m = getMapel(s.mapelId);
-                    const inConflict = relevantConflicts.some(c => c.a.id === s.id || c.b.id === s.id);
+                    const subjectName = 'teaching_assignment' in s ? s.teaching_assignment.subject.name : s.subject_name;
+                    const teacherName = 'teaching_assignment' in s ? s.teaching_assignment.teacher.name : s.teacher_name;
+                    const color = 'teaching_assignment' in s ? s.teaching_assignment.subject.color : '#6366f1';
+                    const key = 'id' in s ? s.id : `${s.day}-${s.start_time}`;
                     return (
-                      <div key={s.id} className={cn('rounded-xl border-l-4 bg-slate-50 p-2.5 transition hover:bg-slate-100', inConflict && 'ring-2 ring-amber-300')} style={{ borderLeftColor: m.color }}>
-                        <p className="text-xs font-bold text-slate-800">{m.name}</p>
-                        <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500"><Clock className="h-3 w-3" /> {s.start}–{s.end}</p>
-                        <p className="flex items-center gap-1 text-[10px] text-slate-500"><DoorOpen className="h-3 w-3" /> {s.room}</p>
-                        <p className="mt-0.5 truncate text-[10px] text-slate-400">{getTeacherName(s.teacherId)}</p>
-                        {inConflict && <p className="mt-1 flex items-center gap-1 text-[9px] font-bold text-amber-600"><AlertTriangle className="h-3 w-3" /> Bentrok!</p>}
+                      <div key={key} className="rounded-xl border-l-4 bg-slate-50 p-2.5 transition hover:bg-slate-100" style={{ borderLeftColor: color }}>
+                        <p className="text-xs font-bold text-slate-800">{subjectName}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-500"><Clock className="h-3 w-3" /> {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}</p>
+                        {s.room && <p className="flex items-center gap-1 text-[10px] text-slate-500"><DoorOpen className="h-3 w-3" /> {s.room}</p>}
+                        <p className="mt-0.5 truncate text-[10px] text-slate-400">{teacherName}</p>
                       </div>
                     );
                   })}
