@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Pengaturan — HALAMAN TERAKHIR, semua 21 halaman tersambung, dikerjakan di branch `dev`)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Pengaturan — HALAMAN TERAKHIR, semua 21 halaman tersambung, `dev` di-merge ke `main`, sudah lolos sapuan uji regresi lintas-role)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -10,7 +10,7 @@
 - 🟡 Fase 3 PRD: 3/5 area selesai (QR Attendance, Storage Monitoring, 2FA & Audit Log) + 1 fitur tambahan di luar PRD (kunci fullscreen ujian). **2 area sengaja di-skip**: proctoring webcam & AI essay scoring (keputusan user).
 - Total: **16 dari 19 modul PRD** dikerjakan. Sisa murni Fase 3 yang di-skip.
 - ➕ **2 modul baru di luar 19 modul PRD resmi** (dibangun 2026-08-23, sesi-sesi lanjutan): Kurikulum CP/TP/ATP dan Kalender Akademik (`CalendarEvent`) — keduanya ada di referensi `Ui-LMS` sejak awal tapi PRD 19-modul resmi tidak pernah mencakupnya sebagai modul backend tersendiri. Dibangun dari nol (migration+model+controller+routes) atas konfirmasi eksplisit ke user tiap kali ditemukan gap — lihat detail di bagian 🔌 → Kurikulum & Kalender.
-- ⚠️ **Sejak Kurikulum, pekerjaan penyambungan dilakukan di branch `dev`** (atas permintaan user), belum di-merge ke `main`. Cek `git branch --show-current` di awal sesi baru — kalau masih di `dev`, lanjutkan di situ kecuali user minta merge/pindah.
+- ✅ **Branch `dev` (dipakai sejak Kurikulum) sudah di-merge ke `main`** (fast-forward, tanpa konflik) dan di-push 2026-08-23 — kerjaan Kurikulum/Kalender/Komunikasi/Files/Pengaturan + fix bug file-URL sekarang semua ada di `main`. `dev` disinkronkan ulang (fast-forward dari `main`) setelah 1 fix tambahan pasca-merge, jadi kedua branch identik saat ini. Sesi berikutnya bisa mulai dari `main` seperti biasa.
 
 **Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
 - ✅ **SEMUA halaman Ui-LMS sudah tersambung ke data asli** (21/21) — Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan, Akademik, Kurikulum, Kalender, Komunikasi (Forum saja), Files, **Pengaturan**. Migrasi UI↔API bertahap yang dimulai 2026-08-22 **selesai** di sesi ini (2026-08-23).
@@ -417,6 +417,17 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
 3. **Field yang gak ada padanan di backend** (ACTIVITIES, ANNOUNCEMENTS, Chat guru-siswa, dll — karena modul Komunikasi di-skip) — halaman yang butuh ini harus disesuaikan tampilannya, bukan dipaksa manggil endpoint yang gak ada.
 4. **Selalu jalankan `npx tsc --noEmit`** di `Ui-LMS/` sebelum test browser — sudah kepakai sesi ini, langsung nangkep kalau ada type mismatch tanpa perlu buka browser dulu.
 5. **CORS backend sudah `allowed_origins: ['*']`** (lihat `Api-LMS/config/cors.php`) — gak perlu proxy Vite, fetch langsung `localhost:5173` → `localhost:8010` jalan.
+
+## 🧪 Sapuan Uji Regresi Pasca-Merge (2026-08-23)
+
+Setelah `dev` di-merge ke `main`, dijalankan sapuan uji cepat lintas 3 role (superadmin, guru/walikelas, siswa) buat nangkep regresi sebelum dianggap "siap dicoba user":
+- **superadmin**: Dashboard, Akademik, Kurikulum, Jadwal, Kalender, Courses/CourseDetail, Bank Soal, Ujian, Nilai, Presensi, Progress, Komunikasi, Laporan, Files, Tugas — semua render tanpa error konsol.
+- **guru (Dewi Lestari)**: Dashboard, buat-lalu-hapus 1 tugas asli end-to-end, Akademik ditolak (403 dari UI, sesuai desain), Presensi, Pengaturan (tab Audit Log & Sistem Sekolah tersembunyi dengan benar karena bukan admin).
+- **siswa (Citra Ayu)**: Dashboard, Jadwal, Tugas, Ujian, Nilai, Presensi, Progress, Files, Pengaturan (tab Role & Permission tersembunyi, sesuai desain), Akademik/Kalender-tulis/Kurikulum-tulis semua ditolak dengan benar (tombol tulis tersembunyi/halaman ditolak).
+
+**1 bug nyata ditemukan & diperbaiki** (bukan cuma "tombol tidak berfungsi", tapi kebocoran informasi UX): tab **Role & Permission** di Pengaturan menampilkan section "Daftar Pengguna" ke semua staf (guru/walikelas/kepsek), padahal `GET /users` di backend dibatasi admin/superadmin saja — hasilnya tabel kosong senyap (403 ditelan diam-diam) buat non-admin, bukan pesan yang jelas. Diperbaiki: section itu sekarang cuma dirender kalau `isAdmin`, Matrix Role & Permission tetap tampil ke semua staf (itu memang dokumentasi publik). Fix ini di-commit terpisah ke `main` lalu disinkron ke `dev`.
+
+Sapuan ini **bukan pengujian exhaustive tiap tombol di 21 halaman** — itu sudah dilakukan satu-per-satu waktu tiap halaman disambungkan (detail lengkap ada di bagian 🔌 di atas). Sapuan ini cuma nangkep regresi besar akibat merge & interaksi antar-halaman yang mungkin belum kena waktu tiap halaman dikerjakan terpisah.
 
 ## Kalau Lanjut Sesi Baru
 
