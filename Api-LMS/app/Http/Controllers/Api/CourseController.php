@@ -14,7 +14,8 @@ class CourseController extends Controller
 {
     /**
      * Guru cuma lihat course yang diampu sendiri; siswa cuma lihat course
-     * di kelasnya; admin/kepsek lihat semua (opsional filter).
+     * di kelasnya; ortu lihat course di kelas anak-anaknya; admin/kepsek
+     * lihat semua (opsional filter).
      */
     public function index(Request $request): JsonResponse
     {
@@ -27,6 +28,9 @@ class CourseController extends Controller
         } elseif ($user->hasRole('siswa')) {
             $classId = $user->studentProfile?->school_class_id;
             $query->whereHas('teachingAssignment', fn ($q) => $q->where('school_class_id', $classId));
+        } elseif ($user->hasRole('ortu')) {
+            $classIds = $user->children()->with('studentProfile')->get()->pluck('studentProfile.school_class_id')->filter();
+            $query->whereHas('teachingAssignment', fn ($q) => $q->whereIn('school_class_id', $classIds));
         } else {
             if ($request->filled('school_class_id')) {
                 $query->whereHas('teachingAssignment', fn ($q) => $q->where('school_class_id', $request->integer('school_class_id')));

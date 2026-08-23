@@ -17,7 +17,7 @@ use Illuminate\Http\Request;
 
 class ProgressController extends Controller
 {
-    /** % materi selesai per siswa di satu course — guru/admin lihat semua, siswa lihat dirinya sendiri. */
+    /** % materi selesai per siswa di satu course — guru/admin lihat semua, siswa lihat dirinya sendiri, ortu lihat anaknya. */
     public function courseProgress(Request $request, Course $course): JsonResponse
     {
         $this->authorizeView($request, $course);
@@ -29,6 +29,8 @@ class ProgressController extends Controller
         $studentsQuery = User::role('siswa')->whereHas('studentProfile', fn ($q) => $q->where('school_class_id', $course->teachingAssignment->school_class_id));
         if ($user->hasRole('siswa')) {
             $studentsQuery->where('id', $user->id);
+        } elseif ($user->hasRole('ortu')) {
+            $studentsQuery->whereIn('id', $user->children()->pluck('users.id'));
         }
         $students = $studentsQuery->get(['id', 'name']);
 
@@ -157,6 +159,9 @@ class ProgressController extends Controller
             return;
         }
         if ($user->hasRole('siswa') && $user->studentProfile?->school_class_id === $course->teachingAssignment->school_class_id) {
+            return;
+        }
+        if ($user->hasRole('ortu') && $user->children()->whereHas('studentProfile', fn ($q) => $q->where('school_class_id', $course->teachingAssignment->school_class_id))->exists()) {
             return;
         }
         abort(403, 'Anda tidak punya akses ke course ini.');

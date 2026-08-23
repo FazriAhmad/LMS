@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Progress)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: OrangTua)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -11,8 +11,8 @@
 - Total: **16 dari 19 modul PRD** dikerjakan. Sisa murni Fase 3 yang di-skip.
 
 **Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
-- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress**
-- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Komunikasi, OrangTua, Laporan, Files, Pengaturan
+- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua**
+- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Komunikasi, Laporan, Files, Pengaturan
 - Strategi: satu halaman per satu waktu (keputusan user), halaman yang belum kebagian giliran tetap tampil pakai data dummy seperti biasa — itu bukan bug.
 - Detail lengkap tiap halaman yang sudah disambungkan (endpoint dipakai, cara verifikasi, penyederhanaan yang diambil) ada di bagian **🔌 Menyambungkan Ui-LMS ke Api-LMS** di bawah.
 
@@ -345,8 +345,17 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
   - **Field yang DIHAPUS (bukan disederhanakan) dari mock karena gak ada data asli sama sekali**: "Durasi Belajar" (PRD sendiri bilang butuh infrastruktur tracking sesi yang belum ada — sudah dicatat di modul 13 sejak awal), "Skor Aktivitas"+ranking "5 besar kelas" (metrik gabungan fiktif, gak ada rumus/data asli di backend), "Tugas & Quiz 9/11" versi teragregasi (diganti dengan hitungan real dari activity feed: jumlah event `tugas_dikumpulkan` dan `quiz_dikerjakan`/`ujian_disubmit`, bukan pecahan terhadap total yang sebenarnya gak ada API-nya).
   - **Diverifikasi end-to-end lewat browser sungguhan**: siswa (Citra Ayu, yang materinya sudah ditandai selesai di sesi sebelumnya) → "Materi Selesai 1/1", "Progress per Mata Pelajaran" 100%, "Aktivitas Terbaru" nunjukin event nyata → login guru (Dewi Lestari) → pilih mata pelajaran → rata-rata 100%, 1/1 siswa aktif, tabel nunjukin Citra Ayu 100% → klik baris siswa → expand nunjukin feed aktivitas yang sama persis kayak yang dilihat siswa sendiri (bukti data konsisten lintas role).
 
+- **OrangTua** — halaman "Data Anak" penuh 6 tab (Nilai, Presensi, Tugas, Jadwal, Progress, Catatan Guru) + selector anak, semua pakai data asli.
+  - **2 celah backend yang dicatat sesi Progress kemarin AKHIRNYA ditambal di sesi ini** (bukan ditunda lagi):
+    - `CourseController::index` ditambah cabang role `ortu` — sebelumnya ortu jatuh ke default "lihat semua course tanpa filter" (bukan celah keamanan besar karena cuma metadata course, tapi tetap salah scope), sekarang di-scope ke course di kelas anak-anaknya (`$user->children()->with('studentProfile')->...->pluck('studentProfile.school_class_id')`).
+    - `ProgressController::authorizeView` + `courseProgress` ditambah cabang ortu — sebelumnya ortu **ditolak total** (403) dari `GET /courses/{id}/progress`, padahal endpoint ini satu-satunya sumber data "progress per mata pelajaran" per anak. Sekarang ortu boleh akses course yang salah satu anaknya terdaftar di kelas itu, dan query siswa di dalamnya otomatis dipersempit ke anak-anaknya sendiri saja (bukan seluruh kelas).
+  - **5 dari 6 tab pakai endpoint yang sudah lebih dulu ada** (dipakai juga di halaman lain yang sudah tersambung): Nilai → `GET /grades/me?student_id=` (sama seperti [Nilai.tsx](Ui-LMS/src/pages/Nilai.tsx)), Presensi → `GET /attendance/summary?student_id=`, Tugas → `GET /parent/assignments?student_id=`, Jadwal → `GET /parent/schedule?student_id=`, Catatan Guru → `GET/POST/DELETE /students/{id}/notes` (modul 15, `TeacherNoteController`) — CRUD baca+hapus dipakai di sini, tulis tetap di sisi guru.
+  - **Tab Progress** (yang butuh tambalan backend di atas): `GET /courses` (di-scope otomatis ke kelas anak) → filter tambahan client-side by `class_name` (jaga-jaga kalau ortu punya anak di kelas berbeda dan cuma mau lihat progress anak yang sedang dipilih) → `GET /courses/{id}/progress` per course, ambil baris milik anak yang dipilih.
+  - **Data per-tab di-cache & di-reset tiap ganti anak** (bukan refetch berulang tiap klik tab yang sama) — pola yang sudah dipakai di CourseDetail/Ujian sebelumnya, dipertahankan konsisten di sini.
+  - **Diverifikasi end-to-end lewat browser sungguhan**: dibuatkan akun ortu test (`budi_ortu`) terhubung ke Citra Ayu lewat `POST /users` dengan `child_ids` → login → selector anak nunjukin Citra Ayu (kelas+NIS asli) → tab Nilai/Presensi/Tugas/Jadwal nunjukin state kosong yang jujur (belum ada data, bukan dummy) → **tab Progress nunjukin "Matematika 1/1 materi"** (bukti nyata celah backend sudah ketambal, sebelumnya bakal 403) → guru tambah 1 catatan lewat API → tab Catatan Guru nunjukin catatan itu dengan nama guru & waktu yang benar → akun ortu test & catatan test dihapus lagi setelah verifikasi.
+
 ### Belum tersambung (masih 100% mock, nunggu giliran)
-Akademik, Kurikulum, Kalender, Komunikasi, OrangTua, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
+Akademik, Kurikulum, Kalender, Komunikasi, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
 
 ### Catatan desain dari penyambungan Tugas (berlaku juga buat halaman lain nanti)
 - **`AssignmentController::show` cuma balikin baris submission yang beneran ada**, bukan semua siswa di kelas dengan status placeholder "belum" (beda dari `AttendanceController::formatList` yang bikin baris kosong buat semua siswa). Jadi tabel "Pengumpulan Siswa" di guru cuma nampilin siswa yang UDAH submit — siswa yang belum sama sekali gak muncul di daftar. Ini bukan bug UI, itu emang bentuk response backend-nya. Kalau mau nampilin roster lengkap kayak Presensi, itu perubahan di `AssignmentController`, bukan di frontend.
@@ -364,8 +373,7 @@ Akademik, Kurikulum, Kalender, Komunikasi, OrangTua, Laporan, Files, Pengaturan.
 1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
 3. **Backend selesai** (16/19 modul PRD — Fase 1 & 2 penuh, Fase 3 sebagian). Sisa Fase 3 yang di-skip (proctoring webcam, AI essay scoring) **jangan dikerjakan tanpa tanya user dulu** — itu keputusan sadar, bukan celah yang lupa digarap.
-4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 10 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
-   - **Kalau lanjut ke OrangTua.tsx nanti**: ada 2 celah backend yang perlu ditambal dulu (dicatat di bagian 🔌 → Progress) — `CourseController::index` belum ada cabang scope buat role `ortu`, dan `ProgressController::authorizeView`/`courseProgress` belum ada cabang ortu — dibutuhkan biar progress-per-mapel anak bisa ditampilkan ke orang tua.
+4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 11 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
 5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
 6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.
 7. **Pola kerja tiap halaman yang disambungkan** (ikuti ini biar konsisten): baca halaman mock-nya dulu penuh → cek endpoint backend yang relevan (controller-nya, bukan nebak) → tulis ulang halaman pakai `api.ts` → `npx tsc --noEmit` → nyalakan backend (port 8010) + preview UI (port 5173) → login & klik beneran lewat browser tool, jangan cuma percaya kompilasi sukses → bersihkan data test → update STATUS.md → commit & push.
