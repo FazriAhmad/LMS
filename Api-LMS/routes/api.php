@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
+use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
 use App\Http\Controllers\Api\ForumController;
@@ -61,6 +62,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/school-classes/{schoolClass}', [SchoolClassController::class, 'show']);
     Route::get('/teaching-assignments', [TeachingAssignmentController::class, 'index']);
     Route::get('/schedule-items', [ScheduleItemController::class, 'index']);
+
+    // Kurikulum CP/TP/ATP — baca bebas buat semua peran login, tulis dibatasi guru pengampu/Admin di controller.
+    Route::get('/curriculum', [CurriculumController::class, 'index']);
+    Route::post('/curriculum', [CurriculumController::class, 'store']);
+    Route::put('/curriculum/{capaian}', [CurriculumController::class, 'update']);
+    Route::delete('/curriculum/{capaian}', [CurriculumController::class, 'destroy']);
+    Route::post('/curriculum/{capaian}/tp', [CurriculumController::class, 'storeTp']);
+    Route::put('/tp/{tp}', [CurriculumController::class, 'updateTp']);
+    Route::delete('/tp/{tp}', [CurriculumController::class, 'destroyTp']);
+    Route::post('/tp/{tp}/atp', [CurriculumController::class, 'storeAtp']);
+    Route::put('/atp/{atp}', [CurriculumController::class, 'updateAtp']);
+    Route::delete('/atp/{atp}', [CurriculumController::class, 'destroyAtp']);
 
     // Course & Materi (modul 04-05) — otorisasi kepemilikan/keanggotaan kelas
     // ditegakkan di dalam masing-masing controller, bukan di sini.

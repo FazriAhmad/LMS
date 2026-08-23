@@ -13,4 +13,9 @@ class Subject extends Model
     {
         return $this->hasMany(TeachingAssignment::class);
     }
+
+    public function capaianPembelajarans(): HasMany
+    {
+        return $this->hasMany(CapaianPembelajaran::class)->orderBy('order');
+    }
 }
