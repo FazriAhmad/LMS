@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Pengaturan — HALAMAN TERAKHIR, semua 21 halaman tersambung, `dev` di-merge ke `main`, sudah lolos sapuan uji regresi lintas-role)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-24 — migrasi 21/21 halaman selesai & lolos regresi, database diisi data dummy buat mockup PDF)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -267,7 +267,9 @@ Semua sudah di-push ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad
 
 ## 🔑 Akun & Data yang Sudah Ada di Database
 
-Data ini nyata ada di DB `LMS` sekarang (bukan cuma dummy test yang dihapus lagi):
+⚠️ **PENTING — database TIDAK minim lagi sejak 2026-08-24.** Sebelumnya database sengaja dijaga cuma berisi 3 akun inti (superadmin/1 guru/1 siswa) supaya gampang diverifikasi. Sejak `DemoDataSeeder` dijalankan (buat bikin mockup PDF, lihat bagian 🖨️ di bawah), database sekarang **berisi banyak data dummy realistis** (24 siswa, 6 guru, 4 kelas, puluhan nilai/tugas/presensi, dst) — **sengaja TIDAK dihapus lagi** atas keputusan user (biar app live juga keliatan "ramai" kalau didemoin, bukan cuma PDF-nya). Kalau butuh database minim lagi buat testing yang presisi, tinggal `php artisan migrate:fresh` lalu re-run alur bikin akun awal manual (bukan re-run seeder).
+
+3 akun inti dari sesi-sesi awal (masih ada, tetap bisa dipakai buat testing presisi):
 
 | Username | Password | Role | Catatan |
 |---|---|---|---|
@@ -275,9 +277,15 @@ Data ini nyata ada di DB `LMS` sekarang (bukan cuma dummy test yang dihapus lagi
 | `dewi_lestari` | `guru12345` | guru, walikelas | Wali kelas XI-IPA-1, ngajar Matematika |
 | `citra_ayu` | `siswa12345` | siswa | NIS 2024001, kelas XI-IPA-1 |
 
-Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", mapel "Matematika" (MTK), kelas "XI-IPA-1", 1 course Matematika dengan 1 modul "Fungsi Komposisi" berisi 1 materi YouTube.
+Data akademik awal: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", mapel "Matematika" (MTK), kelas "XI-IPA-1", 1 course Matematika dengan 1 modul "Fungsi Komposisi" berisi 1 materi YouTube.
 
 **Nama-nama ini sengaja disamakan dengan data dummy di `Ui-LMS/src/lib/data.ts`** (Dewi Lestari = guru Matematika, Citra Ayu Lestari = siswa yang ngumpulin tugas) — biar nanti gampang bikin seeder yang konsisten sama tampilan referensi UI.
+
+**Akun tambahan dari `DemoDataSeeder`** (password seragam per role: guru `guru12345`, siswa `siswa12345`, ortu `ortu12345`):
+- 5 guru baru (`guru_budi_santoso` dst, tiap orang pegang 1 mapel: Bahasa Indonesia/Bahasa Inggris/Fisika/Sejarah/PJOK), 3 di antaranya jadi wali kelas otomatis buat 3 kelas baru.
+- 23 siswa baru (`siswa_ahmad_fauzi` dst) tersebar di 4 kelas: XI-IPA-1 (bareng Citra Ayu), X-IPA-1, X-IPS-1, XI-IPS-1.
+- 4 akun ortu (`ortu_hendra_wijaya` dkk), masing-masing terhubung ke 1 anak (anak pertama tiap kelas) — `ortu_hendra_wijaya` terhubung ke Citra Ayu.
+- 1 akun `kepsek_1` (password `kepsek12345`) buat variasi dashboard Kepala Sekolah — dibuat manual lewat tinker, **bukan bagian dari seeder**, catat kalau mau reproduksi ulang.
 
 ## ⚠️ Catatan Penting Buat Sesi Lanjutan
 
@@ -429,6 +437,16 @@ Setelah `dev` di-merge ke `main`, dijalankan sapuan uji cepat lintas 3 role (sup
 
 Sapuan ini **bukan pengujian exhaustive tiap tombol di 21 halaman** — itu sudah dilakukan satu-per-satu waktu tiap halaman disambungkan (detail lengkap ada di bagian 🔌 di atas). Sapuan ini cuma nangkep regresi besar akibat merge & interaksi antar-halaman yang mungkin belum kena waktu tiap halaman dikerjakan terpisah.
 
+## 🖨️ Mockup PDF (2026-08-24)
+
+User minta mockup PDF proyek ini dengan data dummy biar "keliatan ramai". Dikerjakan dalam 3 tahap:
+
+1. **`Api-LMS/database/seeders/DemoDataSeeder.php`** (baru, reusable — jalankan lagi kapan saja lewat `php artisan db:seed --class=DemoDataSeeder`, aman diulang karena pakai `firstOrCreate`/`updateOrCreate` di titik-titik penting). Ngisi: 2 jurusan, 5 mapel baru (+Matematika lama = 6), 3 kelas baru (+XI-IPA-1 lama = 4), 5 guru baru, 23 siswa baru, 4 akun ortu, 24 teaching assignment + course, modul & materi (buat mapel Matematika & Bahasa Indonesia tiap kelas), 16 tugas + pengumpulan, 48 nilai, 120 presensi (5 hari terakhir), 24 soal bank soal, 8 quiz + attempt, 8 ujian + participant, 20 jadwal, 8 forum thread + reply, catatan guru, 8 agenda kalender, kurikulum CP/TP/ATP (Matematika & Bahasa Indonesia). 1 akun `kepsek_1` dibuat manual terpisah (bukan bagian seeder) buat variasi dashboard.
+2. **Kendala teknis ditemukan**: tool screenshot Browser pane gagal total di sesi ini ("the page is not compositing frames") — bukan bug di app, tapi keterbatasan environment non-interaktif saat itu. Solusinya dialihkan: bukan screenshot literal, tapi **PDF disusun dari data asli yang ditarik lewat API** (bukan dikarang), dirender pakai Python `reportlab` dengan tata letak & warna mengikuti identitas visual app (indigo/violet, kartu statistik, tabel zebra).
+3. Data ditarik lewat `curl` (superadmin/guru/siswa/ortu token) buat tiap "halaman", disimpan sebagai JSON di scratchpad, lalu di-render jadi PDF 20 halaman mencakup semua 21 modul (Dashboard 4 varian peran + Akademik + Kurikulum + Jadwal + Kalender + Courses + Tugas + Ujian&Quiz + Bank Soal + Nilai + Presensi + Progress + Komunikasi + Orang Tua + Laporan + Files + Pengaturan). Script generator: `build_mockup.py` di scratchpad sesi (bukan bagian repo — kalau perlu regenerasi ulang di sesi lain, tulis ulang script-nya, polanya sudah didokumentasikan di sini).
+
+**Konsekuensi penting**: seeder ini beneran nulis ke database `LMS` (bukan cuma buat PDF) — **database sekarang gak minim lagi**, sengaja dibiarkan begitu atas keputusan user (lihat 🔑 di atas).
+
 ## Kalau Lanjut Sesi Baru
 
 1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
@@ -438,7 +456,8 @@ Sapuan ini **bukan pengujian exhaustive tiap tombol di 21 halaman** — itu suda
    - **Penting**: sesi Files menemukan & memperbaiki bug app-wide (link download file rusak + APP_URL salah port) — kalau nemu link file 404 di halaman manapun, itu SUDAH diperbaiki di root cause (`Storage::disk('public')->url()`), jangan diperbaiki lagi per-halaman.
    - **Kalau nemu endpoint paginated baru yang error `.map is not a function`**, curiga dulu ke bungkus paginator dua-lapis vs satu-lapis (beda antar controller — dicatat di bagian 🔌 → Pengaturan) sebelum debug lebih jauh.
    - **Kalau nanti ada fitur/halaman baru yang ternyata gak ada backend-nya**, **konfirmasi dulu ke user** sebelum membangun modul backend baru — jangan diasumsikan sendiri. Cek dulu dengan grep di `Api-LMS/app` sebelum mulai baca mock-nya (pola ini dipakai berulang buat Kurikulum/Kalender/Files sesi ini).
-   - **Cek branch aktif dulu** (`git branch --show-current`) — sejak Kurikulum, kerjaan ada di branch `dev`, **belum di-merge ke `main`**. Semua kerjaan sesi ini (Kurikulum, Kalender, Komunikasi, Files, Pengaturan + fix bug file-URL) ada di `dev`. Tanya user kapan mau merge.
-5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS). Branch `main` berhenti di penyambungan Akademik; branch `dev` (belum di-merge) punya sisanya sampai Pengaturan. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
+   - **Branch `dev` sudah di-merge ke `main`** (2026-08-23) — kedua branch identik sekarang, gak perlu lagi kerja di `dev` kecuali user minta lagi. Cek `git branch --show-current` di awal buat mastiin ada di `main`.
+5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS), branch `main` (branch utama satu-satunya sekarang, `dev` sudah di-merge & disinkron). Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
 6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.
 7. **Pola kerja tiap halaman yang disambungkan** (ikuti ini biar konsisten): baca halaman mock-nya dulu penuh → cek endpoint backend yang relevan (controller-nya, bukan nebak) → tulis ulang halaman pakai `api.ts` → `npx tsc --noEmit` → nyalakan backend (port 8010) + preview UI (port 5173) → login & klik beneran lewat browser tool, jangan cuma percaya kompilasi sukses → bersihkan data test → update STATUS.md → commit & push.
+8. **⚠️ Database SEKARANG berisi banyak data dummy** (24 siswa, 6 guru, 4 kelas, dst — dari `DemoDataSeeder`, lihat 🔑 & 🖨️), bukan minim kayak awal-awal sesi. Kalau butuh testing yang presisi/gampang di-trace, jangan asumsikan cuma ada 1 siswa 1 kelas lagi — cek dulu datanya, atau `migrate:fresh` kalau butuh clean slate.
