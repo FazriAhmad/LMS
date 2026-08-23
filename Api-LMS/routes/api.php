@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ScheduleItemController;
 use App\Http\Controllers\Api\SchoolClassController;
 use App\Http\Controllers\Api\SchoolSettingController;
+use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\StorageController;
 use App\Http\Controllers\Api\SubjectController;
 use App\Http\Controllers\Api\TeacherNoteController;
@@ -40,6 +41,9 @@ Route::post('/login/verify-2fa', [AuthController::class, 'verifyTwoFactor']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/me', [AuthController::class, 'updateProfile']);
+    Route::get('/sessions', [SessionController::class, 'index']);
+    Route::delete('/sessions/{session}', [SessionController::class, 'destroy']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/school-setting', [SchoolSettingController::class, 'show']);
     Route::post('/school-setting', [SchoolSettingController::class, 'update']);

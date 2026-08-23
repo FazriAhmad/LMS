@@ -12,6 +12,7 @@ import { api, clearToken, getToken, setToken, ApiError } from './api';
 interface ApiUser {
   id: string; name: string; username: string; email: string | null;
   role: User['role']; title: string | null; color: string; avatarUrl: string | null;
+  twoFactorEnabled?: boolean;
 }
 
 interface LoginResponse {
@@ -21,7 +22,7 @@ interface LoginResponse {
 }
 
 function apiUserToUser(u: ApiUser): User {
-  return { id: u.id, name: u.name, email: u.email ?? '', role: u.role, title: u.title ?? undefined, color: u.color };
+  return { id: u.id, name: u.name, email: u.email ?? '', role: u.role, title: u.title ?? undefined, color: u.color, twoFactorEnabled: u.twoFactorEnabled };
 }
 
 interface Toast { id: number; text: string; type: 'success' | 'error' | 'info' }
@@ -31,6 +32,7 @@ interface StoreShape {
   authLoading: boolean;
   login: (username: string, password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 
   notifications: Notif[];
   markAllRead: () => void;
@@ -162,6 +164,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await api.get<{ user: ApiUser }>('/me');
+      const u = apiUserToUser(res.user);
+      setUser(u);
+      localStorage.setItem('edunusa_user', JSON.stringify(u));
+    } catch { /* token mungkin sudah invalid, biarkan sesi normal yang menangani */ }
+  }, []);
+
   const logout = useCallback(() => {
     api.post('/logout').catch(() => {});
     clearToken();
@@ -264,7 +275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: StoreShape = {
-    user, authLoading, login, logout,
+    user, authLoading, login, logout, refreshUser,
     notifications, markAllRead, pushNotif,
     toasts, toast,
     assignments, submitAssignment, gradeSubmission, requestRevision,

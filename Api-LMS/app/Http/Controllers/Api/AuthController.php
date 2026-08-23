@@ -141,6 +141,21 @@ class AuthController extends Controller
         return response()->json(['user' => $this->formatUser($request->user())]);
     }
 
+    /** Update profil sendiri (nama/email/title) — beda dari UserController::store yang khusus Admin bikin akun orang lain. */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'title' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $user->update($data);
+
+        return response()->json(['user' => $this->formatUser($user->fresh())]);
+    }
+
     public function changePassword(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -173,6 +188,7 @@ class AuthController extends Controller
             'title' => $user->title,
             'color' => $user->color,
             'avatarUrl' => $user->avatar_url,
+            'twoFactorEnabled' => $user->hasTwoFactorEnabled(),
         ];
     }
 }

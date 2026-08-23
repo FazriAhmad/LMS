@@ -11,6 +11,7 @@ export interface User {
   subjectIds?: string[];
   homeroomClassId?: string;
   childIds?: string[];
+  twoFactorEnabled?: boolean;
 }
 
 export interface Kelas {
