@@ -53,7 +53,7 @@ export default function Pengaturan() {
 
       {tab === 'profil' && <ProfilTab />}
       {tab === 'keamanan' && <KeamananTab />}
-      {tab === 'roles' && isStaff && <RolesTab />}
+      {tab === 'roles' && isStaff && <RolesTab isAdmin={isAdmin} />}
       {tab === 'audit' && isAdmin && <AuditTab />}
       {tab === 'sistem' && isAdmin && <SistemTab />}
     </div>
@@ -272,16 +272,18 @@ function KeamananTab() {
   );
 }
 
-function RolesTab() {
+function RolesTab({ isAdmin }: { isAdmin: boolean }) {
   const { toast } = useStore();
   const [rows, setRows] = useState<ApiUserRow[] | null>(null);
 
   useEffect(() => {
+    if (!isAdmin) return;
     api.get<{ data: { data: ApiUserRow[] } }>('/users').then(r => setRows(r.data.data)).catch(() => setRows([]));
-  }, []);
+  }, [isAdmin]);
 
   return (
     <div className="space-y-6">
+      {isAdmin && (
       <Card title="Daftar Pengguna" pad={false}>
         {rows === null ? <p className="py-6 text-center text-xs text-slate-400">Memuat pengguna…</p> : (
           <TableWrap>
@@ -299,6 +301,7 @@ function RolesTab() {
           </TableWrap>
         )}
       </Card>
+      )}
       <Card title="Matrix Role & Permission" subtitle="Akses fitur per role (RBAC, ditegakkan lewat middleware backend)" pad={false}>
         <TableWrap>
           <thead className="bg-slate-50">
