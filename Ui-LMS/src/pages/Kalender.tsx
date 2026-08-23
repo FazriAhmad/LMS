@@ -1,7 +1,9 @@
-import { CalendarDays, GraduationCap, Palmtree, PartyPopper, UsersRound, BookCheck } from 'lucide-react';
-import { CALENDAR, SCHOOL } from '../lib/data';
+import { useEffect, useState } from 'react';
+import { CalendarDays, GraduationCap, Palmtree, PartyPopper, UsersRound, BookCheck, Plus, Trash2 } from 'lucide-react';
+import { useStore } from '../lib/store';
+import { api, ApiError } from '../lib/api';
 import { fmtDateLong } from '../lib/utils';
-import { Badge, Card, PageHeader } from '../components/ui';
+import { Badge, Button, Card, Modal, PageHeader, inputCls } from '../components/ui';
 import type { LucideIcon } from 'lucide-react';
 
 const TYPE_META: Record<string, { label: string; color: string; icon: LucideIcon; chip: string }> = {
@@ -12,22 +14,74 @@ const TYPE_META: Record<string, { label: string; color: string; icon: LucideIcon
   semester: { label: 'Akademik', color: 'bg-violet-50 text-violet-600 border-violet-200', icon: GraduationCap, chip: 'violet' },
 };
 
+interface ApiCalendarEvent { id: string; title: string; date: string; type: keyof typeof TYPE_META }
+
+const isAdminRole = (role: string) => ['admin', 'superadmin'].includes(role);
+
 export default function Kalender() {
-  const months = [...new Set(CALENDAR.map(e => new Date(e.date).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })))];
+  const { user, toast } = useStore();
+  const [events, setEvents] = useState<ApiCalendarEvent[] | null>(null);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [type, setType] = useState<'libur' | 'kegiatan' | 'rapat' | 'semester'>('libur');
+  const [saving, setSaving] = useState(false);
+
+  const isAdmin = !!user && isAdminRole(user.role);
+
+  const load = () => {
+    api.get<{ data: ApiCalendarEvent[] }>('/calendar-events').then(r => setEvents(r.data)).catch(e => setError(e instanceof ApiError ? e.message : 'Tidak bisa terhubung ke server.'));
+  };
+  useEffect(load, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.post('/calendar-events', { title, date, type });
+      toast('Agenda ditambahkan');
+      setOpen(false); setTitle(''); setDate('');
+      load();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menyimpan', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await api.delete(`/calendar-events/${id.replace('event-', '')}`);
+      toast('Agenda dihapus');
+      load();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menghapus', 'error');
+    }
+  };
+
+  if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
+  if (events === null) return <div className="py-10 text-center text-sm text-slate-400">Memuat kalender…</div>;
+
+  const months = [...new Set(events.map(e => new Date(e.date).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })))];
 
   return (
     <div>
       <PageHeader
         title="Kalender Akademik"
-        desc={`Tahun ajaran ${SCHOOL.year} · Semester ${SCHOOL.semester} · tersinkron dengan Google Calendar`}
-        action={<Badge color="indigo"><CalendarDays className="h-3 w-3" /> {CALENDAR.length} agenda</Badge>}
+        desc="Agenda sekolah (libur, kegiatan, rapat) digabung dengan jadwal ujian nyata"
+        action={
+          <div className="flex items-center gap-2">
+            <Badge color="indigo"><CalendarDays className="h-3 w-3" /> {events.length} agenda</Badge>
+            {isAdmin && <Button size="sm" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Tambah Agenda</Button>}
+          </div>
+        }
       />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {months.map(m => (
             <Card key={m} title={m} pad={false}>
               <div className="divide-y divide-slate-50">
-                {CALENDAR.filter(e => new Date(e.date).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) === m).map(e => {
+                {events.filter(e => new Date(e.date).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }) === m).map(e => {
                   const meta = TYPE_META[e.type];
                   const d = new Date(e.date);
                   return (
@@ -41,12 +95,16 @@ export default function Kalender() {
                         <p className="text-xs text-slate-500">{fmtDateLong(e.date)}</p>
                       </div>
                       <Badge color={meta.chip}><meta.icon className="h-3 w-3" /> {meta.label}</Badge>
+                      {isAdmin && e.id.startsWith('event-') && (
+                        <button onClick={() => remove(e.id)} className="text-slate-300 hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </Card>
           ))}
+          {events.length === 0 && <Card><p className="py-8 text-center text-sm text-slate-400">Belum ada agenda.</p></Card>}
         </div>
         <div className="space-y-4">
           <Card title="Legenda">
@@ -59,17 +117,22 @@ export default function Kalender() {
               ))}
             </div>
           </Card>
-          <Card title="Sinkronisasi">
-            <p className="text-xs leading-relaxed text-slate-500">
-              Kalender akademik otomatis tersinkron ke <b>Google Calendar</b> guru, siswa, dan orang tua.
-              Jadwal ujian CBT juga muncul sebagai event dengan pengingat 1 hari sebelumnya.
-            </p>
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">
-              <span className="h-2 w-2 animate-pulse-dot rounded-full bg-emerald-500" /> Terhubung & tersinkron
-            </div>
-          </Card>
         </div>
       </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title="Tambah Agenda">
+        <div className="space-y-3">
+          <input className={inputCls} placeholder="Judul agenda" value={title} onChange={e => setTitle(e.target.value)} />
+          <input type="date" className={inputCls} value={date} onChange={e => setDate(e.target.value)} />
+          <select className={inputCls} value={type} onChange={e => setType(e.target.value as typeof type)}>
+            <option value="libur">Libur</option>
+            <option value="kegiatan">Kegiatan</option>
+            <option value="rapat">Rapat Dinas</option>
+            <option value="semester">Akademik</option>
+          </select>
+          <Button className="w-full" disabled={!title || !date || saving} onClick={save}>{saving ? 'Menyimpan…' : 'Simpan'}</Button>
+        </div>
+      </Modal>
     </div>
   );
 }

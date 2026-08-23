@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CourseController;
+use App\Http\Controllers\Api\CalendarEventController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\DashboardController;
@@ -74,6 +75,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/tp/{tp}/atp', [CurriculumController::class, 'storeAtp']);
     Route::put('/atp/{atp}', [CurriculumController::class, 'updateAtp']);
     Route::delete('/atp/{atp}', [CurriculumController::class, 'destroyAtp']);
+
+    // Kalender Akademik — gabungan agenda umum (Admin) + jadwal ujian nyata dari tabel exams.
+    Route::get('/calendar-events', [CalendarEventController::class, 'index']);
+    Route::post('/calendar-events', [CalendarEventController::class, 'store']);
+    Route::delete('/calendar-events/{calendarEvent}', [CalendarEventController::class, 'destroy']);
 
     // Course & Materi (modul 04-05) — otorisasi kepemilikan/keanggotaan kelas
     // ditegakkan di dalam masing-masing controller, bukan di sini.
