@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Kalender — modul backend baru, dikerjakan di branch `dev`)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Komunikasi, dikerjakan di branch `dev`)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -13,8 +13,8 @@
 - ⚠️ **Sejak Kurikulum, pekerjaan penyambungan dilakukan di branch `dev`** (atas permintaan user), belum di-merge ke `main`. Cek `git branch --show-current` di awal sesi baru — kalau masih di `dev`, lanjutkan di situ kecuali user minta merge/pindah.
 
 **Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
-- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan, Akademik, Kurikulum, Kalender**
-- ⬜ Masih mock (belum digarap): Komunikasi, Files, Pengaturan
+- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan, Akademik, Kurikulum, Kalender, Komunikasi (Forum saja)**
+- ⬜ Masih mock (belum digarap): Files, Pengaturan
 - Strategi: satu halaman per satu waktu (keputusan user), halaman yang belum kebagian giliran tetap tampil pakai data dummy seperti biasa — itu bukan bug.
 - Detail lengkap tiap halaman yang sudah disambungkan (endpoint dipakai, cara verifikasi, penyederhanaan yang diambil) ada di bagian **🔌 Menyambungkan Ui-LMS ke Api-LMS** di bawah.
 
@@ -382,8 +382,13 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
   - **Ujian di-scope per role** (pola yang sama dipakai di `CourseController`/`ProgressController`): guru/walikelas cuma lihat ujian yang diampu, siswa cuma kelasnya sendiri, ortu cuma kelas anak-anaknya, admin/superadmin/kepsek lihat semua — dicek beneran, bukan diasumsikan dari kode.
   - **Diverifikasi end-to-end lewat browser sungguhan**: admin tambah agenda "Libur Hari Kemerdekaan" → tampil di bulan Agustus → guru buat ujian PTS nyata (tanggal September) → **kalender otomatis nunjukin ujian itu tergabung di bulan yang benar** tanpa perlu input manual kedua kali → admin hapus agenda libur (tombol hapus cuma ada buat event manual, bukan buat event ujian) → siswa `POST /calendar-events` → 403 → siswa `GET /calendar-events` → cuma nunjukin 1 ujian yang sesuai kelasnya (`exam-9`, bukan spam ujian kelas lain) → data test (ujian+soal) dihapus lagi lewat API.
 
+- **Komunikasi** — **beda dari Kurikulum/Kalender**: ini bukan gap yang baru ditemukan, tapi konsekuensi dari keputusan produk eksplisit sesi jauh sebelumnya ("tidak usah ada modul komunikasi, komunikasi lewat forum saja" — sudah tercatat di 3 tempat berbeda di file ini sebelum sesi ini). Jadi bukan "bangun backend baru", tapi "sambungkan bagian yang memang sengaja dipertahankan (Forum), buang bagian yang sengaja tidak dikerjakan (Pengumuman, Chat)".
+  - **Tab Pengumuman & Chat dihapus dari halaman**, bukan didummy-in — gak ada `AnnouncementController`/`ChatController` apapun di backend, dan chat guru-siswa+audit trail butuh infrastruktur real-time yang belum ada (WebSocket/Reverb, disebut eksplisit di STATUS.md sebagai sesuatu yang perlu ditanya user dulu kalau mau dibangun).
+  - **Tab Forum jadi satu-satunya konten halaman** — data digabung lintas semua mata pelajaran (`GET /courses` → `GET /courses/{id}/forum-threads` per course, pola sama seperti Tugas.tsx/Ujian.tsx), setiap thread nunjukin badge mapel+kelas asalnya. Fitur (buat thread pilih mapel dulu, expand-lihat balasan, kirim balasan, hapus thread/balasan dengan moderasi penulis/guru/admin) **sama persis dengan yang sudah ada di tab Forum CourseDetail** (`ForumController`, sudah dibangun sesi backend sebelumnya) — bedanya di sini tampilan gabungan lintas course, bukan per-course.
+  - **Diverifikasi end-to-end lewat browser sungguhan**: guru buat thread baru (pilih mapel dari dropdown) → tampil dengan badge "Matematika · XI-IPA-1" → expand → balas → balasan tampil dengan nama pengirim benar → hapus thread → balasan ikut hilang (cascade, sama seperti verifikasi CourseDetail sebelumnya) → siswa `GET /courses/1/forum-threads` → 200 (baca forum kelasnya sendiri tetap boleh).
+
 ### Belum tersambung (masih 100% mock, nunggu giliran)
-Komunikasi, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
+Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
 
 ### Catatan desain dari penyambungan Tugas (berlaku juga buat halaman lain nanti)
 - **`AssignmentController::show` cuma balikin baris submission yang beneran ada**, bukan semua siswa di kelas dengan status placeholder "belum" (beda dari `AttendanceController::formatList` yang bikin baris kosong buat semua siswa). Jadi tabel "Pengumpulan Siswa" di guru cuma nampilin siswa yang UDAH submit — siswa yang belum sama sekali gak muncul di daftar. Ini bukan bug UI, itu emang bentuk response backend-nya. Kalau mau nampilin roster lengkap kayak Presensi, itu perubahan di `AssignmentController`, bukan di frontend.
@@ -401,7 +406,7 @@ Komunikasi, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dum
 1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
 3. **Backend selesai** (16/19 modul PRD — Fase 1 & 2 penuh, Fase 3 sebagian). Sisa Fase 3 yang di-skip (proctoring webcam, AI essay scoring) **jangan dikerjakan tanpa tanya user dulu** — itu keputusan sadar, bukan celah yang lupa digarap.
-4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 15 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan, Akademik, Kurikulum, Kalender), sisanya masih mock (Komunikasi, Files, Pengaturan). **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
+4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 16 dari ~21 halaman sudah tersambung nyata, sisa **Files** dan **Pengaturan** saja. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
    - **Kalau halaman berikutnya juga ternyata gak ada backend-nya** (kayak Kurikulum & Kalender), **konfirmasi dulu ke user** sebelum membangun modul backend baru — jangan diasumsikan sendiri. Cek dulu dengan grep di `Api-LMS/app` sebelum mulai baca mock-nya.
    - **Cek branch aktif dulu** (`git branch --show-current`) — sejak Kurikulum, kerjaan ada di branch `dev`, belum di-merge ke `main`.
 5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
