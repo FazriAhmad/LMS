@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExamController;
+use App\Http\Controllers\Api\FileController;
 use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\GradeWeightController;
@@ -43,6 +44,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/school-setting', [SchoolSettingController::class, 'show']);
     Route::post('/school-setting', [SchoolSettingController::class, 'update']);
     Route::get('/storage/usage', [StorageController::class, 'usage']);
+    Route::get('/files', [FileController::class, 'index']);
     Route::put('/storage/quota', [StorageController::class, 'updateQuota']);
 
     // 2FA (modul 18, wajib untuk Super Admin/Admin — lihat AuthController::login untuk soft-enforce).

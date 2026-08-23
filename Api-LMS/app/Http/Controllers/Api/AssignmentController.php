@@ -210,7 +210,7 @@ class AssignmentController extends Controller
     {
         $attachments = collect($assignment->attachments ?? [])->map(fn ($a) => [
             'name' => $a['name'],
-            'url' => Storage::url($a['path']),
+            'url' => Storage::disk('public')->url($a['path']),
             'size' => $a['size'],
         ]);
 

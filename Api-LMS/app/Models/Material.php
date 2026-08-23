@@ -31,7 +31,7 @@ class Material extends Model
 
     public function fileUrl(): ?string
     {
-        return $this->file_path ? Storage::url($this->file_path) : null;
+        return $this->file_path ? Storage::disk('public')->url($this->file_path) : null;
     }
 
     /** Ukuran file dalam format terbaca manusia, mis. "2.4 MB". */

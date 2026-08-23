@@ -29,6 +29,6 @@ class AssignmentSubmission extends Model
 
     public function fileUrl(): ?string
     {
-        return $this->file_path ? Storage::url($this->file_path) : null;
+        return $this->file_path ? Storage::disk('public')->url($this->file_path) : null;
     }
 }
