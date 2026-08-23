@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Ujian/QuizPlayer/ExamPlayer)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: BankSoal)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -11,8 +11,8 @@
 - Total: **16 dari 19 modul PRD** dikerjakan. Sisa murni Fase 3 yang di-skip.
 
 **Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
-- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer**
-- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, BankSoal, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan
+- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal**
+- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan
 - Strategi: satu halaman per satu waktu (keputusan user), halaman yang belum kebagian giliran tetap tampil pakai data dummy seperti biasa — itu bukan bug.
 - Detail lengkap tiap halaman yang sudah disambungkan (endpoint dipakai, cara verifikasi, penyederhanaan yang diambil) ada di bagian **🔌 Menyambungkan Ui-LMS ke Api-LMS** di bawah.
 
@@ -331,8 +331,15 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
   - **Diverifikasi end-to-end lewat browser sungguhan** (bukan cuma render): guru buat 3 soal (pg/tf/isian) + quiz + ujian lewat API → guru buka ujian (terjadwal→aktif) → siswa kerjakan quiz (jawab 1 benar 2 salah/benar campur) → **skor 60/100 sesuai perhitungan manual** → siswa kerjakan ujian (reload di tengah jalan membuktikan resume-state jalan, jawab kedua soal benar) → **skor 100 akurat** → guru lihat monitoring, status "selesai" & skor "100" muncul benar → data test (quiz/ujian/soal) dihapus lagi lewat API setelah verifikasi selesai.
   - **Belum sempat diuji lewat trigger fullscreen-exit sungguhan** (keterbatasan browser automation headless — sulit mensimulasikan `fullscreenchange` nyata) — endpoint `lock`/`unlock`/`force-finish` dan tombolnya di UI sudah terpasang sesuai kontrak backend (dan sudah teruji langsung lewat `curl` di sesi backend sebelumnya), tapi alur penuh "siswa keluar fullscreen di browser sungguhan → guru unlock dari monitoring" belum diklik manual end-to-end di sesi ini.
 
+- **BankSoal** — list+filter (`GET /questions?q=&subject_id=&difficulty=&type=` — walau di UI filternya dijalankan client-side dari satu fetch penuh, bukan query berulang ke server, lihat catatan di bawah) dan form Tambah Soal (`POST /questions`) pakai data asli, termasuk statistik `used_count`/`correct_rate` on-the-fly dari `QuestionController::withStats()` (modul 09, sudah ada dari sesi backend sebelumnya).
+  - **Form "Tambah Soal" dilengkapi, bukan cuma dipertahankan sama seperti mock** — mock lamanya sebenarnya sudah TIDAK LENGKAP terhadap kebutuhan data asli: field `points` sama sekali gak ada di form mock (padahal wajib di backend), dan field `options` buat tipe PG juga gak pernah diminta ke user (cuma `answer` teks bebas). Ditambahkan: input Poin (angka), input Opsi (pisah koma) khusus tipe PG, opsi Benar/Salah di-auto-set buat tipe TF (gak perlu diketik manual), dan input Kata Kunci Alternatif (pisah koma, opsional) buat tipe Isian. Tanpa ini, form lama akan selalu gagal 422 kalau dikirim ke backend asli.
+  - **Filter dijalankan client-side dari satu fetch penuh** (`GET /questions` tanpa query param), bukan refetch tiap ganti filter — sengaja, karena volume soal per guru/mapel biasanya kecil, dan endpoint sudah support server-side filter kalau nanti volumenya membesar tinggal pindah pemicu filter ke `useEffect` yang nge-refetch.
+  - **Export CSV sekarang beneran jalan** dari data asli (sebelumnya di mock juga sudah nyata secara teknis tapi dari data dummy) — cuma butuh field mapping ke bentuk backend (`used_count`/`correct_rate` bukan `usedCount`/`correctRate`).
+  - **Import Excel tetap toast placeholder** (bukan diregresi, memang belum ada endpoint backend buat itu — sudah dicatat di modul 09 sebagai "sengaja belum dikerjakan", cuma tombol dummy juga di mock lama).
+  - **Diverifikasi end-to-end lewat browser sungguhan**: login guru → bank soal kosong (data test sesi sebelumnya sudah dibersihkan) → tambah soal PG (opsi "25, 30, 35", kunci "30") → tersimpan & tampil dengan opsi benar → ganti tipe di form ke Isian (field form berubah dinamis: opsi hilang, kata kunci muncul) → tambah soal isian → filter search "perkalian" cuma nunjukin soal PG yang cocok, "jakarta" (nyari di teks/kompetensi, bukan jawaban) nunjukin 0 hasil sesuai desain backend → data test dihapus lagi lewat API setelah verifikasi.
+
 ### Belum tersambung (masih 100% mock, nunggu giliran)
-Akademik, Kurikulum, Kalender, BankSoal, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
+Akademik, Kurikulum, Kalender, Progress, Komunikasi, OrangTua, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
 
 ### Catatan desain dari penyambungan Tugas (berlaku juga buat halaman lain nanti)
 - **`AssignmentController::show` cuma balikin baris submission yang beneran ada**, bukan semua siswa di kelas dengan status placeholder "belum" (beda dari `AttendanceController::formatList` yang bikin baris kosong buat semua siswa). Jadi tabel "Pengumpulan Siswa" di guru cuma nampilin siswa yang UDAH submit — siswa yang belum sama sekali gak muncul di daftar. Ini bukan bug UI, itu emang bentuk response backend-nya. Kalau mau nampilin roster lengkap kayak Presensi, itu perubahan di `AssignmentController`, bukan di frontend.
@@ -350,7 +357,7 @@ Akademik, Kurikulum, Kalender, BankSoal, Progress, Komunikasi, OrangTua, Laporan
 1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
 3. **Backend selesai** (16/19 modul PRD — Fase 1 & 2 penuh, Fase 3 sebagian). Sisa Fase 3 yang di-skip (proctoring webcam, AI essay scoring) **jangan dikerjakan tanpa tanya user dulu** — itu keputusan sadar, bukan celah yang lupa digarap.
-4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 8 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
+4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 9 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
 5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
 6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.
 7. **Pola kerja tiap halaman yang disambungkan** (ikuti ini biar konsisten): baca halaman mock-nya dulu penuh → cek endpoint backend yang relevan (controller-nya, bukan nebak) → tulis ulang halaman pakai `api.ts` → `npx tsc --noEmit` → nyalakan backend (port 8010) + preview UI (port 5173) → login & klik beneran lewat browser tool, jangan cuma percaya kompilasi sukses → bersihkan data test → update STATUS.md → commit & push.
