@@ -1,4 +1,4 @@
-# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: OrangTua)
+# Status Progress — LMS Sekolah (Checkpoint 2026-08-23, sesi lanjutan: Laporan)
 
 > File ini dipakai sebagai checkpoint lintas-sesi. Lanjutkan di sesi chat baru dengan minta Claude baca file ini dulu.
 
@@ -11,8 +11,8 @@
 - Total: **16 dari 19 modul PRD** dikerjakan. Sisa murni Fase 3 yang di-skip.
 
 **Frontend (`Ui-LMS`) — SEDANG disambungkan ke backend, bertahap:**
-- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua**
-- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Komunikasi, Laporan, Files, Pengaturan
+- ✅ Tersambung nyata (data dari database, bukan mock): **Login/Logout, Dashboard (5 varian role), Tugas+TugasDetail, Nilai, Presensi (+QR Attendance), Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan**
+- ⬜ Masih mock (belum digarap): Akademik, Kurikulum, Kalender, Komunikasi, Files, Pengaturan
 - Strategi: satu halaman per satu waktu (keputusan user), halaman yang belum kebagian giliran tetap tampil pakai data dummy seperti biasa — itu bukan bug.
 - Detail lengkap tiap halaman yang sudah disambungkan (endpoint dipakai, cara verifikasi, penyederhanaan yang diambil) ada di bagian **🔌 Menyambungkan Ui-LMS ke Api-LMS** di bawah.
 
@@ -354,8 +354,15 @@ Data akademik: tahun ajaran "2024/2025" semester genap (aktif), jurusan "IPA", m
   - **Data per-tab di-cache & di-reset tiap ganti anak** (bukan refetch berulang tiap klik tab yang sama) — pola yang sudah dipakai di CourseDetail/Ujian sebelumnya, dipertahankan konsisten di sini.
   - **Diverifikasi end-to-end lewat browser sungguhan**: dibuatkan akun ortu test (`budi_ortu`) terhubung ke Citra Ayu lewat `POST /users` dengan `child_ids` → login → selector anak nunjukin Citra Ayu (kelas+NIS asli) → tab Nilai/Presensi/Tugas/Jadwal nunjukin state kosong yang jujur (belum ada data, bukan dummy) → **tab Progress nunjukin "Matematika 1/1 materi"** (bukti nyata celah backend sudah ketambal, sebelumnya bakal 403) → guru tambah 1 catatan lewat API → tab Catatan Guru nunjukin catatan itu dengan nama guru & waktu yang benar → akun ortu test & catatan test dihapus lagi setelah verifikasi.
 
+- **Laporan** — dirombak dari konsep mock yang sepenuhnya gak sesuai arsitektur backend nyata. Mock lama nyimulasikan **6 laporan** via "background job queue" (progress bar palsu, notifikasi in-app, "riwayat 90 hari") — padahal backend (`ReportController`, modul 16) dari awal memang **sync langsung** (keputusan produk eksplisit, bukan Laravel Queue) dan cuma punya **3 laporan nyata**: Nilai, Presensi, Performa Kelas. Jadi bukan cuma "sambungkan data", tapi buang konsep UI yang salah total dulu.
+  - **Antrean Background Job dihapus seluruhnya** — gak ada queue di backend, jadi UI yang mensimulasikan job antre/proses/selesai dihapus, bukan dipertahankan sebagai dekorasi kosong.
+  - **3 laporan yang gak ada endpoint-nya (Tugas, Ujian & Analisis, Progress Belajar) dihapus dari daftar kartu**, diganti satu baris catatan jujur di bawah halaman ("belum ada endpoint agregat khusus di backend") — bukan kartu "coming soon" palsu yang keliatan interaktif tapi kosongan.
+  - **3 laporan nyata** (`GET /reports/grades`, `/reports/attendance`, `/reports/class-performance`) masing-masing dapat tombol **Lihat** (preview tabel inline, kolom dirender dinamis dari key JSON biar satu komponen tabel dipakai ulang buat ketiganya — gak reinvent tabel per laporan) dan **CSV** (download file asli, bukan simulasi) — filter kelas/mapel (laporan nilai) dan kelas/rentang tanggal (laporan presensi) diteruskan ke query string yang sama dipakai backend.
+  - **Download CSV berautentikasi** — tantangan teknis baru di sesi ini: `api.ts` cuma bisa parse JSON, gak bisa `blob()`. Solusinya `fetch` manual ke `${API_BASE}${path}?format=csv` dengan header `Authorization: Bearer <token>` (token diambil dari `getToken()` yang sudah ada), lalu `blob()` → `URL.createObjectURL` → klik `<a download>` terprogram. `API_BASE` diekspor dari `api.ts` (sebelumnya cuma konstanta lokal) supaya bisa dipakai di sini.
+  - **Diverifikasi end-to-end lewat browser sungguhan**: laporan nilai kosong (jujur, data test sesi-sesi sebelumnya sudah dibersihkan) → tambah 1 nilai lewat API → klik Terapkan Filter → tabel nunjukin baris asli (nilai akhir 88, grade B) → klik CSV → file terunduh, **isi file diverifikasi langsung lewat curl** (BOM UTF-8 + header + baris data benar, bukan cuma "klik tombol tidak error") → Performa Kelas otomatis ikut kebaca rata-rata nilai 88 dari data yang sama → siswa dicoba akses `/reports/grades` langsung → 403 (otorisasi staf-saja backend tetap tegak) → data test direset balik ke 0 (gak ada endpoint hapus nilai, jadi direset bukan dihapus).
+
 ### Belum tersambung (masih 100% mock, nunggu giliran)
-Akademik, Kurikulum, Kalender, Komunikasi, Laporan, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
+Akademik, Kurikulum, Kalender, Komunikasi, Files, Pengaturan. **Halaman-halaman ini akan tampil dengan data dummy seperti biasa** — itu memang scope yang disepakati, bukan bug.
 
 ### Catatan desain dari penyambungan Tugas (berlaku juga buat halaman lain nanti)
 - **`AssignmentController::show` cuma balikin baris submission yang beneran ada**, bukan semua siswa di kelas dengan status placeholder "belum" (beda dari `AttendanceController::formatList` yang bikin baris kosong buat semua siswa). Jadi tabel "Pengumpulan Siswa" di guru cuma nampilin siswa yang UDAH submit — siswa yang belum sama sekali gak muncul di daftar. Ini bukan bug UI, itu emang bentuk response backend-nya. Kalau mau nampilin roster lengkap kayak Presensi, itu perubahan di `AssignmentController`, bukan di frontend.
@@ -373,7 +380,7 @@ Akademik, Kurikulum, Kalender, Komunikasi, Laporan, Files, Pengaturan. **Halaman
 1. Baca file ini dulu — terutama bagian **🗺️ RINGKASAN CEPAT** di paling atas buat gambaran sekilas.
 2. Baca PRD di link artifact di atas kalau perlu detail modul (section `#roadmap` punya daftar modul per fase resmi).
 3. **Backend selesai** (16/19 modul PRD — Fase 1 & 2 penuh, Fase 3 sebagian). Sisa Fase 3 yang di-skip (proctoring webcam, AI essay scoring) **jangan dikerjakan tanpa tanya user dulu** — itu keputusan sadar, bukan celah yang lupa digarap.
-4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 11 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
+4. **Kerjaan utama sekarang: penyambungan Ui-LMS↔Api-LMS** (lihat 🔌 di bawah) — 12 dari ~21 halaman sudah tersambung nyata (Login/Dashboard, Tugas, Nilai, Presensi, Jadwal, Courses/CourseDetail, Ujian/QuizPlayer/ExamPlayer, BankSoal, Progress, OrangTua, Laporan), sisanya masih mock. **Tanya user mau lanjut ke halaman mana** sebelum mulai — jangan asumsi urutan sendiri.
 5. **Sudah `git init` + push** ke [github.com/FazriAhmad/LMS](https://github.com/FazriAhmad/LMS) branch `main`. Commit tiap modul/fase/halaman selesai — bukan nunggu numpuk banyak dulu baru commit sekali.
 6. Kalau user minta fitur yang butuh infra baru (WebSocket/queue/dsb) atau di luar PRD, **tanya dulu** — beberapa keputusan besar sesi-sesi sebelumnya (skip Komunikasi/Reverb, skip Queue buat Laporan, strategi migrasi UI satu-per-satu) datang dari user langsung, bukan diputuskan sepihak.
 7. **Pola kerja tiap halaman yang disambungkan** (ikuti ini biar konsisten): baca halaman mock-nya dulu penuh → cek endpoint backend yang relevan (controller-nya, bukan nebak) → tulis ulang halaman pakai `api.ts` → `npx tsc --noEmit` → nyalakan backend (port 8010) + preview UI (port 5173) → login & klik beneran lewat browser tool, jangan cuma percaya kompilasi sukses → bersihkan data test → update STATUS.md → commit & push.

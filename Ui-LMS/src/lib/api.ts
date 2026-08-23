@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8010/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8010/api';
 const TOKEN_KEY = 'edunusa_token';
 
 export function getToken(): string | null {
