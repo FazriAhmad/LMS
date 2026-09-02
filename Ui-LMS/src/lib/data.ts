@@ -6,13 +6,13 @@ import type {
 } from './types';
 
 export const SCHOOL = {
-  name: 'SMA Negeri 1 Nusantara',
-  short: 'SMANSA',
+  name: 'Sakuragaoka Gakuen',
+  short: 'SAKURAGAOKA',
   npsn: '20100345',
   address: 'Jl. Pendidikan Raya No. 12, Kota Bandung',
   year: '2024/2025',
   semester: 'Genap',
-  email: 'info@sman1nusantara.sch.id',
+  email: 'info@sakuragaoka.sch.id',
   phone: '(022) 723-4567',
 };
 

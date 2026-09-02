@@ -39,7 +39,7 @@ class Totp
         return false;
     }
 
-    public static function otpauthUrl(string $secret, string $accountLabel, string $issuer = 'EduNusa LMS'): string
+    public static function otpauthUrl(string $secret, string $accountLabel, string $issuer = 'Sakuragaoka Gakuen'): string
     {
         return sprintf(
             'otpauth://totp/%s:%s?secret=%s&issuer=%s&digits=%d&period=%d',

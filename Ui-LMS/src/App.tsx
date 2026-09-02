@@ -22,7 +22,6 @@ import Komunikasi from './pages/Komunikasi';
 import OrangTua from './pages/OrangTua';
 import Laporan from './pages/Laporan';
 import Files from './pages/Files';
-import Integrasi from './pages/Integrasi';
 import Pengaturan from './pages/Pengaturan';
 
 function AuthSplash() {
@@ -70,7 +69,6 @@ export default function App() {
             <Route path="/anak" element={<OrangTua />} />
             <Route path="/laporan" element={<Laporan />} />
             <Route path="/files" element={<Files />} />
-            <Route path="/integrasi" element={<Integrasi />} />
             <Route path="/pengaturan" element={<Pengaturan />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

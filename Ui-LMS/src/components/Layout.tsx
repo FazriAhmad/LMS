@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, BookOpen, ClipboardList, MonitorPlay, Database,
   Star, CalendarCheck, CalendarDays, CalendarRange, TrendingUp, MessagesSquare,
-  Baby, FileSpreadsheet, FolderOpen, Plug, Settings, Bell, LogOut, Menu, X,
+  Baby, FileSpreadsheet, FolderOpen, Settings, Bell, LogOut, Menu, X,
   School, Search, ShieldCheck, Users, Activity,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
@@ -58,7 +58,6 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { to: '/laporan', label: 'Laporan', icon: FileSpreadsheet, roles: ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas', 'ortu'] },
       { to: '/files', label: 'File Management', icon: FolderOpen, roles: STAFF },
-      { to: '/integrasi', label: 'Integrasi', icon: Plug, roles: ['superadmin', 'admin'] },
       { to: '/pengaturan', label: 'Pengaturan & Keamanan', icon: Settings, roles: ALL },
     ],
   },
@@ -88,12 +87,10 @@ export default function Layout() {
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       )}>
         <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50">
-            <GraduationCap className="h-5 w-5 text-white" />
-          </div>
+          <img src="/images/logo-sekolah.jpg" alt="Logo sekolah" className="h-10 w-10 shrink-0 rounded-xl object-cover shadow-lg shadow-indigo-900/50" />
           <div className="min-w-0">
-            <p className="font-display text-sm font-bold text-white">EduNusa LMS</p>
-            <p className="truncate text-[10px] text-slate-400">{SCHOOL.name}</p>
+            <p className="font-display text-sm font-bold text-white">{SCHOOL.name}</p>
+            <p className="truncate text-[10px] text-slate-400">Learning Management System</p>
           </div>
           <button className="ml-auto text-slate-400 lg:hidden" onClick={() => setSidebarOpen(false)}><X className="h-5 w-5" /></button>
         </div>
@@ -208,7 +205,7 @@ export default function Layout() {
           <Outlet />
         </main>
         <footer className="border-t border-slate-200 px-6 py-4 text-center text-[11px] text-slate-400">
-          EduNusa LMS · {SCHOOL.name} · Tahun Ajaran {SCHOOL.year} Semester {SCHOOL.semester}
+          {SCHOOL.name} · Tahun Ajaran {SCHOOL.year} Semester {SCHOOL.semester}
         </footer>
       </div>
     </div>

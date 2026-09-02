@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Lock, ShieldCheck, Sparkles, User as UserIcon, Users2, CalendarCheck, MonitorPlay } from 'lucide-react';
+import { Lock, ShieldCheck, Sparkles, User as UserIcon, Users2, CalendarCheck, MonitorPlay } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { SCHOOL, ROLE_LABELS } from '../lib/data';
 import { Avatar } from '../components/ui';
@@ -27,7 +27,7 @@ export default function Login() {
     const res = await login(username, password);
     setLoading(false);
     if (res.ok) {
-      toast('Selamat datang di EduNusa LMS!');
+      toast(`Selamat datang di ${SCHOOL.name}!`);
       navigate('/');
     } else {
       setError(res.message || 'Username atau password salah.');
@@ -46,12 +46,10 @@ export default function Login() {
       <div className="flex w-full flex-col justify-center px-6 py-10 lg:w-[46%] lg:px-16">
         <div className="mx-auto w-full max-w-md">
           <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50">
-              <GraduationCap className="h-6 w-6 text-white" />
-            </div>
+            <img src="/images/logo-sekolah.jpg" alt="Logo sekolah" className="h-12 w-12 shrink-0 rounded-2xl object-cover shadow-lg shadow-indigo-900/50" />
             <div>
-              <p className="font-display text-lg font-bold text-white">EduNusa LMS</p>
-              <p className="text-xs text-slate-400">{SCHOOL.name}</p>
+              <p className="font-display text-lg font-bold text-white">{SCHOOL.name}</p>
+              <p className="text-xs text-slate-400">Learning Management System</p>
             </div>
           </div>
 
