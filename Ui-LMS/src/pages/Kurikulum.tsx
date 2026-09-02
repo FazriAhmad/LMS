@@ -19,6 +19,7 @@ export default function Kurikulum() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [cps, setCps] = useState<ApiCp[] | null>(null);
   const [subjects, setSubjects] = useState<ApiSubject[]>([]);
+  const [courses, setCourses] = useState<ApiCourseRef[]>([]);
   const [error, setError] = useState('');
 
   const [cpOpen, setCpOpen] = useState(false);
@@ -31,6 +32,7 @@ export default function Kurikulum() {
   const [atpOpen, setAtpOpen] = useState<number | null>(null);
   const [atpCode, setAtpCode] = useState('');
   const [atpText, setAtpText] = useState('');
+  const [atpCourseId, setAtpCourseId] = useState('');
   const [saving, setSaving] = useState(false);
 
   const isStaff = !!user && isStaffRole(user.role);
@@ -40,6 +42,7 @@ export default function Kurikulum() {
   };
   useEffect(load, []);
   useEffect(() => { api.get<{ data: ApiSubject[] }>('/subjects').then(r => { setSubjects(r.data); setCpSubjectId(s => s || String(r.data[0]?.id ?? '')); }).catch(() => {}); }, []);
+  useEffect(() => { api.get<{ data: ApiCourseRef[] }>('/courses').then(r => setCourses(r.data)).catch(() => {}); }, []);
 
   const toggle = (k: string) => setOpen(o => ({ ...o, [k]: !o[k] }));
 
@@ -74,9 +77,9 @@ export default function Kurikulum() {
   const saveAtp = async (tpId: number) => {
     setSaving(true);
     try {
-      await api.post(`/tp/${tpId}/atp`, { code: atpCode, text: atpText });
+      await api.post(`/tp/${tpId}/atp`, { code: atpCode, text: atpText, course_id: atpCourseId ? Number(atpCourseId) : null });
       toast('Alur Tujuan Pembelajaran ditambahkan');
-      setAtpOpen(null); setAtpCode(''); setAtpText('');
+      setAtpOpen(null); setAtpCode(''); setAtpText(''); setAtpCourseId('');
       load();
     } catch (e) {
       toast(e instanceof ApiError ? e.message : 'Gagal menyimpan', 'error');
@@ -155,7 +158,7 @@ export default function Kurikulum() {
                               </div>
                             ))}
                             {isStaff && (
-                              <Button size="sm" variant="ghost" onClick={() => { setAtpOpen(tp.id); setAtpCode(''); setAtpText(''); }}>
+                              <Button size="sm" variant="ghost" onClick={() => { setAtpOpen(tp.id); setAtpCode(''); setAtpText(''); setAtpCourseId(''); }}>
                                 <Plus className="h-3.5 w-3.5" /> Tambah ATP
                               </Button>
                             )}
@@ -199,6 +202,14 @@ export default function Kurikulum() {
         <div className="space-y-3">
           <input className={inputCls} placeholder="Kode (cth: ATP 1.1.1)" value={atpCode} onChange={e => setAtpCode(e.target.value)} />
           <textarea rows={3} className={inputCls} placeholder="Teks Alur Tujuan Pembelajaran…" value={atpText} onChange={e => setAtpText(e.target.value)} />
+          <select className={inputCls} value={atpCourseId} onChange={e => setAtpCourseId(e.target.value)}>
+            <option value="">Tanpa tautan Course (opsional)</option>
+            {courses.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.teaching_assignment.subject.name} · {c.teaching_assignment.school_class.name}
+              </option>
+            ))}
+          </select>
           <Button className="w-full" disabled={!atpCode || !atpText || saving} onClick={() => atpOpen && saveAtp(atpOpen)}>{saving ? 'Menyimpan…' : 'Simpan'}</Button>
         </div>
       </Modal>
