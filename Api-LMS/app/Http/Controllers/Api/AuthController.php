@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\SchoolClass;
 use App\Models\User;
 use App\Support\Totp;
 use Illuminate\Http\JsonResponse;
@@ -184,7 +185,15 @@ class AuthController extends Controller
             'name' => $user->name,
             'username' => $user->username,
             'email' => $user->email,
+            // `role` = peran utama (dipakai buat badge & dashboard). `roles` = SEMUA peran:
+            // seorang guru yang ditunjuk jadi wali kelas punya dua-duanya, dan kalau frontend
+            // cuma melihat peran pertama, menu khusus wali kelas tidak pernah muncul.
             'role' => $user->getRoleNames()->first(),
+            'roles' => $user->getRoleNames()->values(),
+            // Kelas yang diwalikelasi — wali kelas cuma mengurusi satu kelas, jadi ini
+            // dikirim sekali di sini supaya UI tidak perlu query terpisah.
+            'homeroomClass' => SchoolClass::where('homeroom_teacher_id', $user->id)
+                ->first(['id', 'name'])?->only(['id', 'name']),
             'title' => $user->title,
             'color' => $user->color,
             'avatarUrl' => $user->avatar_url,

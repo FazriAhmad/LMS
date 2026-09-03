@@ -4,7 +4,7 @@ import {
   LayoutDashboard, GraduationCap, BookOpen, ClipboardList, MonitorPlay, Database,
   Star, CalendarCheck, CalendarDays, CalendarRange, TrendingUp, MessagesSquare,
   Baby, FileSpreadsheet, FolderOpen, Settings, Bell, LogOut, Menu, X,
-  School, Search, ShieldCheck, Users, Activity, MessageSquareText,
+  School, Search, ShieldCheck, Users, Activity, MessageSquareText, FileText,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { ROLE_LABELS, ROLE_COLORS, SCHOOL } from '../lib/data';
@@ -44,14 +44,25 @@ const NAV: { group: string; items: NavItem[] }[] = [
       { to: '/nilai', label: 'Nilai', icon: Star, roles: ALL },
       { to: '/presensi', label: 'Presensi', icon: CalendarCheck, roles: ALL },
       { to: '/progress', label: 'Progress & Aktivitas', icon: TrendingUp, roles: ALL },
+      { to: '/materi-kelas', label: 'Materi Kelas', icon: FileText, roles: ['siswa'] },
+    ],
+  },
+  {
+    /**
+     * Grup terpisah untuk "topi" wali kelas. Guru mengurus mata pelajarannya lintas kelas
+     * (grup Pembelajaran di atas); wali kelas mengurus SATU kelas. Seorang guru yang
+     * merangkap wali kelas melihat kedua grup sekaligus — itu memang perilaku yang diharapkan.
+     */
+    group: 'Wali Kelas',
+    items: [
+      { to: '/materi-kelas', label: 'Materi Kelas', icon: FileText, roles: ['walikelas'] },
+      { to: '/pesan', label: 'Pesan Orang Tua', icon: MessageSquareText, roles: ['walikelas'] },
     ],
   },
   {
     group: 'Komunikasi',
     items: [
       { to: '/komunikasi', label: 'Forum Diskusi', icon: MessagesSquare, roles: STAFF.concat('siswa') },
-      // Kanal privat wali kelas <-> orang tua, terpisah dari forum mapel.
-      { to: '/pesan', label: 'Pesan Orang Tua', icon: MessageSquareText, roles: ['walikelas'] },
     ],
   },
   {
@@ -117,8 +128,13 @@ export default function Layout() {
   if (!user) return null;
   const unread = notifications.filter(n => !n.read).length;
 
+  // Dicek terhadap SEMUA peran, bukan cuma peran utama: guru yang merangkap wali kelas
+  // harus dapat menu guru sekaligus menu khusus wali kelas.
+  const myRoles: Role[] = user.roles?.length ? user.roles : [user.role];
   const navSource = user.role === 'ortu' ? NAV_ORTU : NAV;
-  const navFor = navSource.map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(user.role)) })).filter(g => g.items.length);
+  const navFor = navSource
+    .map(g => ({ ...g, items: g.items.filter(i => i.roles.some(r => myRoles.includes(r))) }))
+    .filter(g => g.items.length);
 
   return (
     <div className="flex min-h-screen">

@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CalendarEventController;
+use App\Http\Controllers\Api\ClassMaterialController;
 use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\CurriculumController;
@@ -104,6 +105,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/materials/{material}', [MaterialController::class, 'update']);
     Route::delete('/materials/{material}', [MaterialController::class, 'destroy']);
     Route::post('/materials/{material}/complete', [MaterialController::class, 'markComplete']);
+
+    // Materi kelas — kanal wali kelas (PDF saja, satu kelas), terpisah dari materi mapel milik guru.
+    Route::get('/class-materials', [ClassMaterialController::class, 'index']);
+    Route::post('/class-materials', [ClassMaterialController::class, 'store']);
+    Route::delete('/class-materials/{classMaterial}', [ClassMaterialController::class, 'destroy']);
 
     // Tugas (modul 06) — otorisasi kepemilikan/keanggotaan kelas ditegakkan di controller.
     Route::get('/courses/{course}/assignments', [AssignmentController::class, 'index']);

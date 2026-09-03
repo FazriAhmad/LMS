@@ -9,6 +9,7 @@ import Jadwal from './pages/Jadwal';
 import Kalender from './pages/Kalender';
 import Courses from './pages/Courses';
 import CourseDetail from './pages/CourseDetail';
+import MateriKelas from './pages/MateriKelas';
 import Tugas from './pages/Tugas';
 import TugasDetail from './pages/TugasDetail';
 import Ujian from './pages/Ujian';
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/kalender" element={<Kalender />} />
             <Route path="/courses" element={<Courses />} />
             <Route path="/courses/:id" element={<CourseDetail />} />
+            <Route path="/materi-kelas" element={<MateriKelas />} />
             <Route path="/tugas" element={<Tugas />} />
             <Route path="/tugas/:id" element={<TugasDetail />} />
             <Route path="/ujian" element={<Ujian />} />

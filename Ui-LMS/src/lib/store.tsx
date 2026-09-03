@@ -12,6 +12,7 @@ import { api, clearToken, getToken, setToken, ApiError } from './api';
 interface ApiUser {
   id: string; name: string; username: string; email: string | null;
   role: User['role']; title: string | null; color: string; avatarUrl: string | null;
+  roles?: User['role'][]; homeroomClass?: { id: number; name: string } | null;
   twoFactorEnabled?: boolean;
 }
 
@@ -22,7 +23,12 @@ interface LoginResponse {
 }
 
 function apiUserToUser(u: ApiUser): User {
-  return { id: u.id, name: u.name, email: u.email ?? '', role: u.role, title: u.title ?? undefined, color: u.color, twoFactorEnabled: u.twoFactorEnabled };
+  return {
+    id: u.id, name: u.name, email: u.email ?? '', role: u.role,
+    roles: u.roles?.length ? u.roles : [u.role],
+    homeroomClass: u.homeroomClass ?? null,
+    title: u.title ?? undefined, color: u.color, twoFactorEnabled: u.twoFactorEnabled,
+  };
 }
 
 interface Toast { id: number; text: string; type: 'success' | 'error' | 'info' }

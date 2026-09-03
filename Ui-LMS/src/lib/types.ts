@@ -4,7 +4,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  /** Peran utama — dipakai buat badge & pemilihan dashboard. */
   role: Role;
+  /** Semua peran. Guru yang ditunjuk jadi wali kelas punya `guru` DAN `walikelas`. */
+  roles?: Role[];
+  /** Kelas yang diwalikelasi (wali kelas cuma pegang satu kelas), null kalau bukan wali kelas. */
+  homeroomClass?: { id: number; name: string } | null;
   title?: string;
   color: string;
   classId?: string;
