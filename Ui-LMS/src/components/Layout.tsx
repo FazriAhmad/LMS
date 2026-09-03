@@ -4,7 +4,7 @@ import {
   LayoutDashboard, GraduationCap, BookOpen, ClipboardList, MonitorPlay, Database,
   Star, CalendarCheck, CalendarDays, CalendarRange, TrendingUp, MessagesSquare,
   Baby, FileSpreadsheet, FolderOpen, Settings, Bell, LogOut, Menu, X,
-  School, Search, ShieldCheck, Users, Activity, MessageSquareText, FileText,
+  School, Search, ShieldCheck, Users, Activity, MessageSquareText, FileText, UsersRound,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { api } from '../lib/api';
@@ -62,6 +62,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
      */
     group: 'Wali Kelas',
     items: [
+      { to: '/pengurus-kelas', label: 'Daftar Siswa & Pengurus', icon: UsersRound, roles: ['walikelas'] },
       { to: '/materi-kelas', label: 'Materi Kelas', icon: FileText, roles: ['walikelas'] },
       { to: '/pesan', label: 'Pesan Orang Tua', icon: MessageSquareText, roles: ['walikelas'] },
     ],

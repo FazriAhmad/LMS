@@ -69,6 +69,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/subjects', [SubjectController::class, 'index']);
     Route::get('/school-classes', [SchoolClassController::class, 'index']);
     Route::get('/school-classes/{schoolClass}', [SchoolClassController::class, 'show']);
+    // Pengurus kelas (ketua/wakil/sekretaris/bendahara/keamanan) — wali kelas kelas itu saja.
+    Route::get('/school-classes/{schoolClass}/roster', [SchoolClassController::class, 'roster']);
+    Route::put('/school-classes/{schoolClass}/students/{student}/role', [SchoolClassController::class, 'assignRole']);
     Route::get('/teaching-assignments', [TeachingAssignmentController::class, 'index']);
     Route::get('/schedule-items', [ScheduleItemController::class, 'index']);
 
