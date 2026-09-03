@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\AssignmentController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CalendarEventController;
+use App\Http\Controllers\Api\CourseController;
 use App\Http\Controllers\Api\CourseModuleController;
 use App\Http\Controllers\Api\CurriculumController;
 use App\Http\Controllers\Api\DashboardController;
@@ -16,8 +16,9 @@ use App\Http\Controllers\Api\ForumController;
 use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\GradeWeightController;
 use App\Http\Controllers\Api\MajorController;
-use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\ParentMessageController;
+use App\Http\Controllers\Api\ParentPortalController;
 use App\Http\Controllers\Api\ProgressController;
 use App\Http\Controllers\Api\QrAttendanceController;
 use App\Http\Controllers\Api\QuestionController;
@@ -145,6 +146,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/parent/children', [ParentPortalController::class, 'children']);
     Route::get('/parent/schedule', [ParentPortalController::class, 'schedule']);
     Route::get('/parent/assignments', [ParentPortalController::class, 'assignments']);
+
+    // Pesan langsung ortu <-> wali kelas — percakapan berbasis siswa, peserta cuma dua pihak itu.
+    Route::get('/parent-messages', [ParentMessageController::class, 'index']);
+    Route::get('/parent-messages/{student}', [ParentMessageController::class, 'messages']);
+    Route::post('/parent-messages/{student}', [ParentMessageController::class, 'store']);
 
     // Catatan guru ke orang tua (bagian modul 15).
     Route::get('/students/{student}/notes', [TeacherNoteController::class, 'index']);

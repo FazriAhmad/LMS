@@ -49,7 +49,9 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Komunikasi',
     items: [
-      { to: '/komunikasi', label: 'Komunikasi', icon: MessagesSquare, roles: ALL },
+      { to: '/komunikasi', label: 'Forum Diskusi', icon: MessagesSquare, roles: STAFF.concat('siswa') },
+      // Kanal privat wali kelas <-> orang tua, terpisah dari forum mapel.
+      { to: '/pesan', label: 'Pesan Orang Tua', icon: MessageSquareText, roles: ['walikelas'] },
     ],
   },
   {
@@ -90,7 +92,7 @@ const NAV_ORTU: { group: string; items: NavItem[] }[] = [
     group: 'Sekolah',
     items: [
       { to: '/kalender', label: 'Kalender Akademik', icon: CalendarDays, roles: ['ortu'] },
-      { to: '/komunikasi', label: 'Komunikasi', icon: MessagesSquare, roles: ['ortu'] },
+      { to: '/pesan', label: 'Komunikasi', icon: MessagesSquare, roles: ['ortu'] },
     ],
   },
   {

@@ -19,6 +19,7 @@ import Nilai from './pages/Nilai';
 import Presensi from './pages/Presensi';
 import Progress from './pages/Progress';
 import Komunikasi from './pages/Komunikasi';
+import PesanOrtu from './pages/PesanOrtu';
 import DataAnak from './pages/DataAnak';
 import AktivitasAnak from './pages/AktivitasAnak';
 import Laporan from './pages/Laporan';
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="/presensi" element={<Presensi />} />
             <Route path="/progress" element={<Progress />} />
             <Route path="/komunikasi" element={<Komunikasi />} />
+            <Route path="/pesan" element={<PesanOrtu />} />
             <Route path="/anak" element={<DataAnak />} />
             <Route path="/aktivitas/:tab" element={<AktivitasAnak />} />
             <Route path="/laporan" element={<Laporan />} />

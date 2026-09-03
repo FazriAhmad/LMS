@@ -263,7 +263,7 @@ export default function AktivitasAnak() {
               </Card>
             ))}
             <p className="text-center text-[11px] text-slate-400">
-              Ingin berdiskusi dengan wali kelas? <Link to="/komunikasi" className="font-bold text-indigo-600 hover:underline">Buka komunikasi</Link>
+              Ingin berdiskusi dengan wali kelas? <Link to="/pesan" className="font-bold text-indigo-600 hover:underline">Buka komunikasi</Link>
             </p>
           </div>
         )
