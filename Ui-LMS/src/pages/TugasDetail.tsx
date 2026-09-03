@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ChevronLeft, Clock, Paperclip, Upload, Star, MessageSquareText, RotateCcw,
-  ClipboardCheck, FileText, Send,
+  ClipboardCheck, FileText, Send, Pencil,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { api, ApiError } from '../lib/api';
@@ -52,6 +52,12 @@ export default function TugasDetail() {
   const [feedback, setFeedback] = useState('');
   const [gradeSaving, setGradeSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   const load = () => {
     api.get<{ data: Assignment }>(`/assignments/${id}`)
@@ -111,6 +117,38 @@ export default function TugasDetail() {
 
   const submissions = assignment.submissions ?? [];
 
+  /**
+   * Backend mengirim deadline sebagai ISO8601 di zona waktu aplikasi (mis.
+   * "2026-09-07T00:00:00+07:00"), sedangkan <input type="datetime-local"> minta
+   * "YYYY-MM-DDTHH:mm" — 16 karakter pertamanya sudah persis jam dinding lokal,
+   * jadi cukup dipotong. Waktu dikirim balik, formatnya disamakan dengan alur
+   * "Buat Tugas" di Tugas.tsx supaya Laravel memparsenya dengan cara yang sama.
+   */
+  const openEdit = () => {
+    setEditTitle(assignment.title);
+    setEditDesc(assignment.description ?? '');
+    setEditDeadline(assignment.deadline.slice(0, 16));
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    setEditSaving(true);
+    try {
+      await api.put(`/assignments/${assignment.id}`, {
+        title: editTitle,
+        description: editDesc || null,
+        deadline: editDeadline.replace('T', ' ') + ':00',
+      });
+      toast('Tugas diperbarui');
+      setEditOpen(false);
+      load();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menyimpan perubahan', 'error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   return (
     <div>
       <Link to="/tugas" className="mb-4 inline-flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-indigo-600">
@@ -129,6 +167,11 @@ export default function TugasDetail() {
             <p className={cn('text-sm font-bold', overdue ? 'text-rose-700' : 'text-indigo-700')}>{fmtDate(assignment.deadline)}</p>
             {!overdue && <p className="text-[10px] text-slate-400">{daysUntil(assignment.deadline)} hari lagi</p>}
           </div>
+          {isTeacher && (
+            <Button variant="secondary" size="sm" onClick={openEdit}>
+              <Pencil className="h-3.5 w-3.5" /> Edit Tugas
+            </Button>
+          )}
         </div>
         {assignment.description && <p className="mt-4 text-sm leading-relaxed text-slate-600">{assignment.description}</p>}
         {assignment.attachments.length > 0 && (
@@ -299,6 +342,26 @@ export default function TugasDetail() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Tugas">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-600">Judul</label>
+            <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-600">Deskripsi</label>
+            <textarea rows={3} value={editDesc} onChange={e => setEditDesc(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" placeholder="Instruksi tugas…" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-600">Deadline</label>
+            <input type="datetime-local" value={editDeadline} onChange={e => setEditDeadline(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+          </div>
+          <Button className="w-full" disabled={!editTitle || !editDeadline || editSaving} onClick={saveEdit}>
+            {editSaving ? 'Menyimpan…' : 'Simpan Perubahan'}
+          </Button>
+        </div>
       </Modal>
     </div>
   );

@@ -238,6 +238,23 @@ Permintaan user: wali kelas bisa mengunggah materi pembelajaran **PDF saja**, da
 - Endpoint: `GET /class-materials`, `POST /class-materials`, `DELETE /class-materials/{classMaterial}`. Response `index` menyertakan `can_upload` supaya frontend tidak perlu menebak sendiri boleh/tidaknya menampilkan tombol unggah.
 - **Sudah teruji end-to-end lewat browser**: wali kelas melihat grup "Wali Kelas" DAN menu guru sekaligus → buka Materi Kelas (judul otomatis "Materi Kelas XI-IPA-1") → unggah file teks bersamaran `.pdf` **ditolak** → unggah PDF asli **berhasil & tampil** → siswa kelas itu melihat materinya **tanpa** tombol unggah/hapus → guru non-walikelas tidak punya grup Wali Kelas dan `/class-materials` membalas 404 (memang tidak punya kelas wali). 1 PDF contoh "Tata Tertib Kelas XI-IPA-1" sengaja dibiarkan sebagai data demo.
 
+### 🐛 UI guru yang hilang: tambah modul/materi & edit tugas (2026-09-03)
+
+Laporan user: login sebagai guru, **tidak bisa menambah modul pembelajaran**, dan **tidak bisa mengubah deadline tugas**.
+
+**Bukan bug backend — endpoint-nya sudah ada sejak Fase 1, cuma tidak pernah dipasangi UI.** `POST /courses/{course}/modules`, `POST /course-modules/{module}/materials`, `DELETE` keduanya, dan `PUT /assignments/{assignment}` (yang memang sudah menerima `deadline`) semuanya lengkap dan berotorisasi benar. Yang kurang: `CourseDetail.tsx` menampilkan modul & materi **read-only**, dan `TugasDetail.tsx` menampilkan deadline sebagai teks tanpa jalan mengubahnya. Ini sisa dari migrasi UI↔API yang fokusnya "menampilkan data asli" — jalur tulisnya kelewat.
+- **Pelajaran buat halaman lain**: kalau ada endpoint tulis yang tidak punya tombol di UI, kemungkinan besar polanya sama. Cek `routes/api.php` vs halaman terkait sebelum menyimpulkan "fitur belum dibangun".
+
+**Yang ditambahkan di `CourseDetail.tsx`** (tab Modul & Materi, hanya untuk guru pengampu/admin — `isTeacher`):
+- Tombol **Tambah Modul** (judul + pertemuan opsional).
+- Tombol **+ Materi** per modul, mendukung semua tipe yang diterima backend: pdf/doc/ppt/image/video (unggah berkas, batas ukuran ditampilkan sesuai tipe), youtube (ID video), dan link (URL). Materi berkas dikirim multipart, youtube/link JSON biasa.
+- Tombol **hapus** untuk modul dan materi — sengaja ikut dibangun, karena UI yang cuma bisa menambah membuat salah input jadi permanen.
+
+**Yang ditambahkan di `TugasDetail.tsx`**: tombol **Edit Tugas** (judul, deskripsi, deadline).
+- **Konversi format deadline** perlu diperhatikan kalau menambah form serupa: backend mengirim `toIso8601String()` (mis. `2026-09-07T00:00:00+07:00`) sedangkan `<input type="datetime-local">` minta `YYYY-MM-DDTHH:mm` — 16 karakter pertama ISO itu sudah persis jam dinding lokal, jadi cukup `.slice(0, 16)`. Saat dikirim balik dipakai format yang sama dengan alur "Buat Tugas" di `Tugas.tsx` (`.replace('T', ' ') + ':00'`) supaya Laravel memparsenya dengan cara yang sama.
+
+**Sudah teruji end-to-end lewat browser sebagai guru**: tambah modul "Trigonometri Dasar" → muncul sebagai Modul 4 → tambah materi PDF ke modul itu → muncul dengan ukuran berkas benar → ubah deadline tugas 7 Sep → 24 Des 2026 → **diverifikasi masih benar setelah reload halaman** (bukan cuma state lokal). Data uji dibersihkan sesudahnya: modul + materinya dihapus (file ikut), deadline dikembalikan ke 7 Sep 2026.
+
 ### Modul 16 — Laporan & Export
 - **Keputusan produk: sync, bukan Laravel Queue** seperti disarankan PRD — user pilih ini karena untuk skala satu sekolah proses langsung cukup cepat, dan queue worker terpisah (`php artisan queue:work`) nambah proses yang harus di-manage di luar web server. Gampang dipindah ke queue job asli nanti kalau laporan mulai berat/lambat, tanpa ubah query intinya.
 - **Export CSV native PHP** (`fputcsv`), bukan library `maatwebsite/excel`/`dompdf` — CSV buka mulus di Excel, jadi cukup buat kebutuhan "export ke Excel" tanpa nambah dependency baru. Export PDF asli (rapor dengan layout) tidak dikerjakan — beda kebutuhan dari CSV tabular, butuh dompdf + template desain.

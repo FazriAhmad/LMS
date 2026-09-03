@@ -7,7 +7,7 @@ import {
 import { useStore } from '../lib/store';
 import { api, ApiError } from '../lib/api';
 import { cn, fmtDate, fmtDateTime } from '../lib/utils';
-import { Avatar, Badge, Button, Card, EmptyState, Modal, PageHeader, ProgressBar, Tabs } from '../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Modal, PageHeader, ProgressBar, Tabs, inputCls } from '../components/ui';
 import type { MaterialType } from '../lib/types';
 
 const MAT_ICON: Record<MaterialType, { icon: typeof FileText; color: string; label: string }> = {
@@ -61,6 +61,18 @@ export default function CourseDetail() {
   const [threadTitle, setThreadTitle] = useState('');
   const [threadBody, setThreadBody] = useState('');
 
+  // Tambah modul & materi (guru pengampu / admin)
+  const [modOpen, setModOpen] = useState(false);
+  const [modTitle, setModTitle] = useState('');
+  const [modPertemuan, setModPertemuan] = useState('');
+  const [matForModule, setMatForModule] = useState<number | null>(null);
+  const [matType, setMatType] = useState<MaterialType>('pdf');
+  const [matTitle, setMatTitle] = useState('');
+  const [matFile, setMatFile] = useState<File | null>(null);
+  const [matYoutube, setMatYoutube] = useState('');
+  const [matUrl, setMatUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+
   const isSiswa = user?.role === 'siswa';
   const isTeacher = !!user && isStaffRole(user.role);
 
@@ -94,6 +106,73 @@ export default function CourseDetail() {
   const allMats = course.modules.flatMap(mo => mo.materials);
   const completedIds = course.completed_material_ids ?? [];
   const doneCount = allMats.filter(x => completedIds.includes(x.id)).length;
+
+  const FILE_TYPES: MaterialType[] = ['pdf', 'doc', 'ppt', 'image', 'video'];
+
+  const createModule = async () => {
+    setSaving(true);
+    try {
+      await api.post(`/courses/${id}/modules`, { title: modTitle, pertemuan: modPertemuan || null });
+      toast('Modul ditambahkan');
+      setModOpen(false); setModTitle(''); setModPertemuan('');
+      loadCourse();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menambah modul', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteModule = async (moduleId: number) => {
+    try {
+      await api.delete(`/course-modules/${moduleId}`);
+      toast('Modul dihapus');
+      loadCourse();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menghapus modul', 'error');
+    }
+  };
+
+  const resetMatForm = () => { setMatType('pdf'); setMatTitle(''); setMatFile(null); setMatYoutube(''); setMatUrl(''); };
+
+  const createMaterial = async () => {
+    if (!matForModule) return;
+    setSaving(true);
+    try {
+      // Materi berkas dikirim sebagai multipart; youtube/link cukup JSON biasa.
+      let body: FormData | Record<string, string>;
+      if (FILE_TYPES.includes(matType)) {
+        if (!matFile) return;
+        const fd = new FormData();
+        fd.append('type', matType);
+        fd.append('title', matTitle);
+        fd.append('file', matFile);
+        body = fd;
+      } else if (matType === 'youtube') {
+        body = { type: matType, title: matTitle, youtube_id: matYoutube };
+      } else {
+        body = { type: matType, title: matTitle, url: matUrl };
+      }
+      await api.post(`/course-modules/${matForModule}/materials`, body);
+      toast('Materi ditambahkan');
+      setMatForModule(null); resetMatForm();
+      loadCourse();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menambah materi', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteMaterial = async (matId: number) => {
+    try {
+      await api.delete(`/materials/${matId}`);
+      toast('Materi dihapus');
+      loadCourse();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Gagal menghapus materi', 'error');
+    }
+  };
 
   const markComplete = async (matId: number) => {
     try {
@@ -195,9 +274,30 @@ export default function CourseDetail() {
 
       {tab === 'materi' && (
         <div className="space-y-5">
+          {isTeacher && (
+            <div className="flex justify-end">
+              <Button onClick={() => { setModTitle(''); setModPertemuan(''); setModOpen(true); }}>
+                <Plus className="h-4 w-4" /> Tambah Modul
+              </Button>
+            </div>
+          )}
           {course.modules.length === 0 && <Card><EmptyState icon={FileText} title="Belum ada modul" /></Card>}
           {course.modules.map((mod, mi) => (
-            <Card key={mod.id} title={`Modul ${mi + 1}: ${mod.title}`} subtitle={mod.pertemuan ?? undefined}>
+            <Card
+              key={mod.id}
+              title={`Modul ${mi + 1}: ${mod.title}`}
+              subtitle={mod.pertemuan ?? undefined}
+              action={isTeacher ? (
+                <div className="flex items-center gap-1.5">
+                  <Button size="sm" variant="secondary" onClick={() => { resetMatForm(); setMatForModule(mod.id); }}>
+                    <Plus className="h-3.5 w-3.5" /> Materi
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => deleteModule(mod.id)}>
+                    <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                  </Button>
+                </div>
+              ) : undefined}
+            >
               <div className="space-y-2">
                 {mod.materials.map(mat => {
                   const meta = MAT_ICON[mat.type];
@@ -219,6 +319,11 @@ export default function CourseDetail() {
                           <a href={mat.url} target="_blank" rel="noreferrer">
                             <Button size="sm" variant="ghost"><Download className="h-3.5 w-3.5" /></Button>
                           </a>
+                        )}
+                        {isTeacher && (
+                          <Button size="sm" variant="ghost" onClick={() => deleteMaterial(mat.id)}>
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                          </Button>
                         )}
                         {isSiswa && (
                           <button onClick={() => !done && markComplete(mat.id)} className="ml-1" title={done ? 'Sudah selesai' : 'Tandai selesai'}>
@@ -433,6 +538,55 @@ export default function CourseDetail() {
           <input value={threadTitle} onChange={e => setThreadTitle(e.target.value)} placeholder="Judul diskusi…" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
           <textarea value={threadBody} onChange={e => setThreadBody(e.target.value)} rows={4} placeholder="Tulis pertanyaan atau topik…" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
           <Button className="w-full" disabled={!threadTitle || !threadBody} onClick={submitThread}>Publikasikan</Button>
+        </div>
+      </Modal>
+
+      <Modal open={modOpen} onClose={() => setModOpen(false)} title="Tambah Modul">
+        <div className="space-y-3">
+          <input className={inputCls} placeholder="Judul modul (cth: Pengantar & Konsep Dasar)" value={modTitle} onChange={e => setModTitle(e.target.value)} />
+          <input className={inputCls} placeholder="Pertemuan (opsional, cth: Pertemuan 1)" value={modPertemuan} onChange={e => setModPertemuan(e.target.value)} />
+          <Button className="w-full" disabled={!modTitle || saving} onClick={createModule}>
+            {saving ? 'Menyimpan…' : 'Simpan'}
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={matForModule !== null} onClose={() => setMatForModule(null)} title="Tambah Materi">
+        <div className="space-y-3">
+          <select className={inputCls} value={matType} onChange={e => { setMatType(e.target.value as MaterialType); setMatFile(null); }}>
+            <option value="pdf">PDF</option>
+            <option value="doc">Dokumen Word</option>
+            <option value="ppt">Presentasi PPT</option>
+            <option value="image">Gambar</option>
+            <option value="video">Video (unggah)</option>
+            <option value="youtube">YouTube</option>
+            <option value="link">Tautan</option>
+          </select>
+          <input className={inputCls} placeholder="Judul materi" value={matTitle} onChange={e => setMatTitle(e.target.value)} />
+
+          {FILE_TYPES.includes(matType) && (
+            <div>
+              <input type="file" className={inputCls} onChange={e => setMatFile(e.target.files?.[0] ?? null)} />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Maksimal {matType === 'image' ? '5 MB' : matType === 'video' ? '50 MB' : '20 MB'}.
+                {matType === 'video' && ' Untuk video panjang, YouTube unlisted lebih disarankan.'}
+              </p>
+            </div>
+          )}
+          {matType === 'youtube' && (
+            <input className={inputCls} placeholder="ID video YouTube (cth: dQw4w9WgXcQ)" value={matYoutube} onChange={e => setMatYoutube(e.target.value)} />
+          )}
+          {matType === 'link' && (
+            <input className={inputCls} placeholder="https://…" value={matUrl} onChange={e => setMatUrl(e.target.value)} />
+          )}
+
+          <Button
+            className="w-full"
+            disabled={saving || !matTitle || (FILE_TYPES.includes(matType) ? !matFile : matType === 'youtube' ? !matYoutube : !matUrl)}
+            onClick={createMaterial}
+          >
+            {saving ? 'Menyimpan…' : 'Simpan'}
+          </Button>
         </div>
       </Modal>
     </div>
