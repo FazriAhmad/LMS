@@ -8,6 +8,7 @@ import { useStore } from '../lib/store';
 import { api, ApiError } from '../lib/api';
 import { cn, fmtDate, fmtDateTime, daysUntil, isOverdue } from '../lib/utils';
 import { Avatar, Badge, Button, Card, Modal, TableWrap, Td, Th } from '../components/ui';
+import QuestionPicker, { type ApiQuestion } from '../components/QuestionPicker';
 
 interface SubmissionAnswer { question_id: number; answer: string | null; is_correct: boolean | null }
 
@@ -50,7 +51,7 @@ interface Assignment {
 const TYPE_LABEL: Record<string, string> = { pg: 'Pilihan Ganda', tf: 'Benar/Salah', isian: 'Isian', essay: 'Esai' };
 
 interface Course {
-  teaching_assignment: { subject: { name: string; code: string; color: string }; school_class: { name: string } };
+  teaching_assignment: { subject: { id: number; name: string; code: string; color: string }; school_class: { name: string } };
 }
 
 const isStaffRole = (role: string) => ['guru', 'walikelas', 'admin', 'superadmin', 'kepsek'].includes(role);
@@ -74,6 +75,7 @@ export default function TugasDetail() {
   const [editDesc, setEditDesc] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [editPicked, setEditPicked] = useState<ApiQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
 
   const load = () => {
@@ -150,6 +152,9 @@ export default function TugasDetail() {
     setEditTitle(assignment.title);
     setEditDesc(assignment.description ?? '');
     setEditDeadline(assignment.deadline.slice(0, 16));
+    // difficulty tidak dikirim balik oleh /assignments/{id} — cuma dipakai QuestionPicker
+    // buat menampilkan badge kesulitan di daftar bank, tidak dibutuhkan di daftar soal terpilih.
+    setEditPicked(assignment.questions.map(q => ({ ...q, answer: q.answer ?? null, difficulty: '' })));
     setEditOpen(true);
   };
 
@@ -160,6 +165,7 @@ export default function TugasDetail() {
         title: editTitle,
         description: editDesc || null,
         deadline: editDeadline.replace('T', ' ') + ':00',
+        question_ids: editPicked.map(q => q.id),
       });
       toast('Tugas diperbarui');
       setEditOpen(false);
@@ -454,6 +460,9 @@ export default function TugasDetail() {
             <label className="mb-1 block text-xs font-bold text-slate-600">Deadline</label>
             <input type="datetime-local" value={editDeadline} onChange={e => setEditDeadline(e.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
           </div>
+
+          <QuestionPicker subjectId={course.teaching_assignment.subject.id} picked={editPicked} onChange={setEditPicked} />
+
           <Button className="w-full" disabled={!editTitle || !editDeadline || editSaving} onClick={saveEdit}>
             {editSaving ? 'Menyimpan…' : 'Simpan Perubahan'}
           </Button>
