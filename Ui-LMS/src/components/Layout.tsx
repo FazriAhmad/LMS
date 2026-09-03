@@ -4,7 +4,7 @@ import {
   LayoutDashboard, GraduationCap, BookOpen, ClipboardList, MonitorPlay, Database,
   Star, CalendarCheck, CalendarDays, CalendarRange, TrendingUp, MessagesSquare,
   Baby, FileSpreadsheet, FolderOpen, Settings, Bell, LogOut, Menu, X,
-  School, Search, ShieldCheck, Users, Activity,
+  School, Search, ShieldCheck, Users, Activity, MessageSquareText,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { ROLE_LABELS, ROLE_COLORS, SCHOOL } from '../lib/data';
@@ -50,15 +50,53 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Komunikasi',
     items: [
       { to: '/komunikasi', label: 'Komunikasi', icon: MessagesSquare, roles: ALL },
-      { to: '/anak', label: 'Data Anak', icon: Baby, roles: ['ortu'] },
     ],
   },
   {
     group: 'Sistem',
     items: [
-      { to: '/laporan', label: 'Laporan', icon: FileSpreadsheet, roles: ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas', 'ortu'] },
+      { to: '/laporan', label: 'Laporan', icon: FileSpreadsheet, roles: ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas'] },
       { to: '/files', label: 'File Management', icon: FolderOpen, roles: STAFF },
       { to: '/pengaturan', label: 'Pengaturan & Keamanan', icon: Settings, roles: ALL },
+    ],
+  },
+];
+
+/**
+ * Ortu punya struktur menu sendiri, bukan hasil filter NAV di atas: yang dilihat ortu adalah
+ * aktivitas ANAKNYA (lewat endpoint /parent/*), bukan halaman guru/siswa yang kebetulan
+ * boleh diakses. Semua item Aktivitas Anak menunjuk ke satu halaman ber-tab (`/aktivitas/:tab`).
+ */
+const NAV_ORTU: { group: string; items: NavItem[] }[] = [
+  {
+    group: 'Utama',
+    items: [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard, roles: ['ortu'] },
+      { to: '/anak', label: 'Data Anak', icon: Baby, roles: ['ortu'] },
+    ],
+  },
+  {
+    group: 'Aktivitas Anak',
+    items: [
+      { to: '/aktivitas/nilai', label: 'Nilai', icon: Star, roles: ['ortu'] },
+      { to: '/aktivitas/presensi', label: 'Presensi', icon: CalendarCheck, roles: ['ortu'] },
+      { to: '/aktivitas/tugas', label: 'Tugas', icon: ClipboardList, roles: ['ortu'] },
+      { to: '/aktivitas/jadwal', label: 'Jadwal', icon: CalendarRange, roles: ['ortu'] },
+      { to: '/aktivitas/progress', label: 'Progress', icon: TrendingUp, roles: ['ortu'] },
+      { to: '/aktivitas/catatan', label: 'Catatan Guru', icon: MessageSquareText, roles: ['ortu'] },
+    ],
+  },
+  {
+    group: 'Sekolah',
+    items: [
+      { to: '/kalender', label: 'Kalender Akademik', icon: CalendarDays, roles: ['ortu'] },
+      { to: '/komunikasi', label: 'Komunikasi', icon: MessagesSquare, roles: ['ortu'] },
+    ],
+  },
+  {
+    group: 'Sistem',
+    items: [
+      { to: '/pengaturan', label: 'Pengaturan & Keamanan', icon: Settings, roles: ['ortu'] },
     ],
   },
 ];
@@ -77,7 +115,8 @@ export default function Layout() {
   if (!user) return null;
   const unread = notifications.filter(n => !n.read).length;
 
-  const navFor = NAV.map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(user.role)) })).filter(g => g.items.length);
+  const navSource = user.role === 'ortu' ? NAV_ORTU : NAV;
+  const navFor = navSource.map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(user.role)) })).filter(g => g.items.length);
 
   return (
     <div className="flex min-h-screen">

@@ -21,13 +21,20 @@ class ParentPortalController extends Controller
      */
     public function children(Request $request): JsonResponse
     {
-        $children = $request->user()->children()->with('studentProfile.schoolClass')->get();
+        $children = $request->user()->children()
+            ->with('studentProfile.schoolClass.homeroomTeacher:id,name', 'studentProfile.schoolClass.major:id,name')
+            ->get();
 
         return response()->json(['data' => $children->map(fn (User $c) => [
             'student_id' => $c->id,
             'name' => $c->name,
+            'username' => $c->username,
+            'email' => $c->email,
             'nis' => $c->studentProfile?->nis,
+            'gender' => $c->studentProfile?->gender,
             'class_name' => $c->studentProfile?->schoolClass?->name,
+            'major_name' => $c->studentProfile?->schoolClass?->major?->name,
+            'homeroom_teacher' => $c->studentProfile?->schoolClass?->homeroomTeacher?->name,
         ])]);
     }
 

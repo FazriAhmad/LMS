@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { ClipboardList, MessageSquareText } from 'lucide-react';
-import { useStore } from '../lib/store';
 import { api, ApiError } from '../lib/api';
 import { cn, gradeColor, attendancePct, fmtDate, fmtDateTime, isOverdue, daysUntil } from '../lib/utils';
-import { Avatar, Badge, Card, PageHeader, ProgressBar, Tabs, TableWrap, Td, Th } from '../components/ui';
+import { Avatar, Badge, Card, PageHeader, ProgressBar } from '../components/ui';
 
-const TABS = [
-  { id: 'nilai', label: 'Nilai' },
-  { id: 'presensi', label: 'Presensi' },
-  { id: 'tugas', label: 'Tugas' },
-  { id: 'jadwal', label: 'Jadwal' },
-  { id: 'progress', label: 'Progress' },
-  { id: 'catatan', label: 'Catatan Guru' },
-];
+/** Judul per tab — tab-nya datang dari URL (`/aktivitas/:tab`), digerakkan menu sidebar ortu. */
+const TAB_META: Record<string, { title: string; desc: string }> = {
+  nilai: { title: 'Nilai Anak', desc: 'Nilai tugas, quiz, PTS, dan PAS beserta nilai akhir tiap mata pelajaran' },
+  presensi: { title: 'Presensi Anak', desc: 'Rekap kehadiran anak semester ini — hadir, izin, sakit, alpa, terlambat' },
+  tugas: { title: 'Tugas Anak', desc: 'Daftar tugas beserta tenggat dan status pengumpulannya' },
+  jadwal: { title: 'Jadwal Anak', desc: 'Jadwal pelajaran mingguan di kelas anak' },
+  progress: { title: 'Progress Belajar Anak', desc: 'Progres penyelesaian materi per mata pelajaran' },
+  catatan: { title: 'Catatan Guru', desc: 'Catatan kualitatif dari guru tentang perkembangan anak' },
+};
 const DAYS = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
 interface ApiChild { student_id: number; name: string; nis: string | null; class_name: string | null }
@@ -28,11 +28,10 @@ interface ApiTeacherNote { id: number; note: string; created_at: string; teacher
 const statusLabel: Record<string, string> = { belum: 'Belum dikumpulkan', sudah: 'Sudah dikumpulkan', revisi: 'Perlu revisi', dinilai: 'Dinilai' };
 const statusColor: Record<string, string> = { belum: 'slate', sudah: 'sky', revisi: 'amber', dinilai: 'emerald' };
 
-export default function OrangTua() {
-  const { toast } = useStore();
+export default function AktivitasAnak() {
+  const { tab = 'nilai' } = useParams();
   const [children, setChildren] = useState<ApiChild[] | null>(null);
   const [childId, setChildId] = useState<number | null>(null);
-  const [tab, setTab] = useState('nilai');
   const [error, setError] = useState('');
 
   const [grades, setGrades] = useState<{ grades: ApiGradeRow[]; average: number } | null>(null);
@@ -87,11 +86,14 @@ export default function OrangTua() {
     }
   }, [tab, childId, children, grades, attendance, assignments, schedule, progressRows, notes]);
 
+  const meta = TAB_META[tab];
+  if (!meta) return <Navigate to="/aktivitas/nilai" replace />;
+
   if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
   if (children === null) return <div className="py-10 text-center text-sm text-slate-400">Memuat data anak…</div>;
   if (children.length === 0) return (
     <div>
-      <PageHeader title="Data Anak" desc="Pantau nilai, presensi, tugas, jadwal, progress, dan catatan guru untuk setiap anak" />
+      <PageHeader title={meta.title} desc={meta.desc} />
       <Card><p className="py-8 text-center text-sm text-slate-400">Belum ada data anak yang terhubung ke akun ini.</p></Card>
     </div>
   );
@@ -100,22 +102,32 @@ export default function OrangTua() {
 
   return (
     <div>
-      <PageHeader title="Data Anak" desc="Pantau nilai, presensi, tugas, jadwal, progress, dan catatan guru untuk setiap anak" />
+      <PageHeader title={meta.title} desc={meta.desc} />
 
-      <div className="mb-6 flex flex-wrap gap-3">
-        {children.map(c => (
-          <button key={c.student_id} onClick={() => setChildId(c.student_id)} className={cn('flex items-center gap-3 rounded-2xl border-2 bg-white p-4 pr-6 text-left transition', childId === c.student_id ? 'border-indigo-500 shadow-md shadow-indigo-100' : 'border-slate-200 hover:border-indigo-200')}>
-            <Avatar name={c.name} color="#6366f1" size="lg" />
-            <div>
-              <p className="text-sm font-bold text-slate-900">{c.name}</p>
-              <p className="text-xs text-slate-500">{c.class_name ? `Kelas ${c.class_name}` : ''}{c.nis ? ` · NIS ${c.nis}` : ''}</p>
-            </div>
-            {childId === c.student_id && <Badge color="indigo" className="ml-2">Dipilih</Badge>}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-6"><Tabs tabs={TABS} active={tab} onChange={setTab} /></div>
+      {/* Pemilih anak hanya relevan kalau anaknya lebih dari satu. */}
+      {children.length > 1 && (
+        <div className="mb-6 flex flex-wrap gap-3">
+          {children.map(c => (
+            <button key={c.student_id} onClick={() => setChildId(c.student_id)} className={cn('flex items-center gap-3 rounded-2xl border-2 bg-white p-4 pr-6 text-left transition', childId === c.student_id ? 'border-indigo-500 shadow-md shadow-indigo-100' : 'border-slate-200 hover:border-indigo-200')}>
+              <Avatar name={c.name} color="#6366f1" size="lg" />
+              <div>
+                <p className="text-sm font-bold text-slate-900">{c.name}</p>
+                <p className="text-xs text-slate-500">{c.class_name ? `Kelas ${c.class_name}` : ''}{c.nis ? ` · NIS ${c.nis}` : ''}</p>
+              </div>
+              {childId === c.student_id && <Badge color="indigo" className="ml-2">Dipilih</Badge>}
+            </button>
+          ))}
+        </div>
+      )}
+      {children.length === 1 && (
+        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <Avatar name={child.name} color="#6366f1" size="lg" />
+          <div>
+            <p className="text-sm font-bold text-slate-900">{child.name}</p>
+            <p className="text-xs text-slate-500">{child.class_name ? `Kelas ${child.class_name}` : ''}{child.nis ? ` · NIS ${child.nis}` : ''}</p>
+          </div>
+        </div>
+      )}
 
       {tab === 'nilai' && (
         grades === null ? <p className="py-8 text-center text-sm text-slate-400">Memuat nilai…</p> :
@@ -251,7 +263,7 @@ export default function OrangTua() {
               </Card>
             ))}
             <p className="text-center text-[11px] text-slate-400">
-              Ingin berdiskusi dengan guru? <Link to="/komunikasi" className="font-bold text-indigo-600 hover:underline">Buka forum diskusi</Link>
+              Ingin berdiskusi dengan wali kelas? <Link to="/komunikasi" className="font-bold text-indigo-600 hover:underline">Buka komunikasi</Link>
             </p>
           </div>
         )
