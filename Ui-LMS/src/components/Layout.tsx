@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, GraduationCap, BookOpen, ClipboardList, MonitorPlay, Database,
@@ -7,6 +7,7 @@ import {
   School, Search, ShieldCheck, Users, Activity, MessageSquareText, FileText,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { api } from '../lib/api';
 import { ROLE_LABELS, ROLE_COLORS, SCHOOL } from '../lib/data';
 import { cn, timeAgo } from '../lib/utils';
 import { Avatar } from './ui';
@@ -14,6 +15,12 @@ import type { Role } from '../lib/types';
 import type { LucideIcon } from 'lucide-react';
 
 interface NavItem { to: string; label: string; icon: LucideIcon; roles: Role[] }
+
+/** Bentuk minimal dari GET /courses — cuma yang dipakai buat label kelas di sidebar. */
+interface ApiCourseRef {
+  id: number;
+  teaching_assignment: { subject: { name: string }; school_class: { name: string } };
+}
 
 const ALL: Role[] = ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas', 'siswa', 'ortu'];
 const STAFF: Role[] = ['superadmin', 'admin', 'kepsek', 'guru', 'walikelas'];
@@ -125,16 +132,48 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
-  if (!user) return null;
-  const unread = notifications.filter(n => !n.read).length;
+  const [myCourses, setMyCourses] = useState<ApiCourseRef[]>([]);
 
   // Dicek terhadap SEMUA peran, bukan cuma peran utama: guru yang merangkap wali kelas
   // harus dapat menu guru sekaligus menu khusus wali kelas.
-  const myRoles: Role[] = user.roles?.length ? user.roles : [user.role];
+  const myRoles: Role[] = user?.roles?.length ? user.roles : user ? [user.role] : [];
+  const isGuru = myRoles.includes('guru');
+
+  // Daftar kelas yang diampu diambil dari /courses — untuk guru, endpoint itu sudah
+  // tersaring ke teaching_assignment miliknya sendiri. Sengaja hanya untuk guru:
+  // buat admin/kepsek endpoint yang sama mengembalikan SEMUA course sekolah.
+  useEffect(() => {
+    if (!isGuru) return;
+    api.get<{ data: ApiCourseRef[] }>('/courses').then(r => setMyCourses(r.data)).catch(() => {});
+  }, [isGuru, user?.id]);
+
+  if (!user) return null;
+  const unread = notifications.filter(n => !n.read).length;
+
+  const homeroom = user.homeroomClass;
+  const taughtGroup = isGuru && myCourses.length
+    ? [{
+      group: 'Kelas Diampu',
+      items: myCourses.map(c => ({
+        to: `/courses/${c.id}`,
+        label: `${c.teaching_assignment.school_class.name} · ${c.teaching_assignment.subject.name}`,
+        icon: BookOpen,
+        roles: myRoles,
+      })),
+    }]
+    : [];
+
   const navSource = user.role === 'ortu' ? NAV_ORTU : NAV;
   const navFor = navSource
     .map(g => ({ ...g, items: g.items.filter(i => i.roles.some(r => myRoles.includes(r))) }))
-    .filter(g => g.items.length);
+    .filter(g => g.items.length)
+    .flatMap(g => {
+      // Kelas yang diampu (topi guru) muncul persis di bawah menu Pembelajaran…
+      if (g.group === 'Pembelajaran') return [g, ...taughtGroup];
+      // …dan kelas wali disebut namanya di judul grupnya sendiri, karena cuma ada satu.
+      if (g.group === 'Wali Kelas' && homeroom) return [{ ...g, group: `Wali Kelas · ${homeroom.name}` }];
+      return [g];
+    });
 
   return (
     <div className="flex min-h-screen">
@@ -159,7 +198,9 @@ export default function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/'}
+                  // '/courses' ikut `end` supaya "Mata Pelajaran" tidak ikut menyala
+                  // waktu salah satu kelas di bawahnya (/courses/{id}) sedang dibuka.
+                  end={item.to === '/' || item.to === '/courses'}
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) => cn(
                     'mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition',
