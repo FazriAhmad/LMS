@@ -9,6 +9,8 @@ import { api, ApiError } from '../lib/api';
 import { cn, fmtDate, fmtDateTime, daysUntil, isOverdue } from '../lib/utils';
 import { Avatar, Badge, Button, Card, Modal, TableWrap, Td, Th } from '../components/ui';
 
+interface SubmissionAnswer { question_id: number; answer: string | null; is_correct: boolean | null }
+
 interface Submission {
   id: number;
   student_id: number;
@@ -19,6 +21,17 @@ interface Submission {
   score: number | null;
   feedback: string | null;
   revisions: number;
+  answers: SubmissionAnswer[];
+}
+
+interface Question {
+  id: number;
+  type: 'pg' | 'tf' | 'isian' | 'essay';
+  text: string;
+  options: string[] | null;
+  points: number;
+  /** Hanya dikirim ke guru, atau ke siswa setelah dia mengumpulkan. */
+  answer?: string | null;
 }
 
 interface Assignment {
@@ -29,9 +42,12 @@ interface Assignment {
   deadline: string;
   attachments: { name: string; url: string; size: number }[];
   rubric: { criterion: string; weight: number }[];
+  questions: Question[];
   my_submission: Submission | null;
   submissions?: Submission[];
 }
+
+const TYPE_LABEL: Record<string, string> = { pg: 'Pilihan Ganda', tf: 'Benar/Salah', isian: 'Isian', essay: 'Esai' };
 
 interface Course {
   teaching_assignment: { subject: { name: string; code: string; color: string }; school_class: { name: string } };
@@ -58,6 +74,7 @@ export default function TugasDetail() {
   const [editDesc, setEditDesc] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
 
   const load = () => {
     api.get<{ data: Assignment }>(`/assignments/${id}`)
@@ -79,12 +96,17 @@ export default function TugasDetail() {
   const mySub = assignment.my_submission;
   const overdue = isOverdue(assignment.deadline);
 
+  const hasQuestions = assignment.questions.length > 0;
+
   const submit = async () => {
-    if (!file) return;
+    if (!hasQuestions && !file) return;
     setSubmitting(true);
     try {
+      // Jawaban dikirim sebagai answers[<question_id>] supaya Laravel membacanya
+      // sebagai array bertanda kunci — bentuk yang sama dipakai backend saat menilai.
       const fd = new FormData();
-      fd.append('file', file);
+      if (file) fd.append('file', file);
+      assignment.questions.forEach(q => fd.append(`answers[${q.id}]`, answers[q.id] ?? ''));
       await api.post(`/assignments/${assignment.id}/submit`, fd);
       toast('Tugas berhasil dikumpulkan ✓');
       setFile(null);
@@ -187,6 +209,73 @@ export default function TugasDetail() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {/* Daftar soal — guru melihat lengkap dengan kunci, siswa mengerjakannya di sini. */}
+          {hasQuestions && (
+            <Card
+              title={`Soal (${assignment.questions.length})`}
+              subtitle={isTeacher ? 'Soal objektif dinilai otomatis saat siswa mengumpulkan' : 'Jawab semua soal, lalu kumpulkan'}
+            >
+              <div className="space-y-4">
+                {assignment.questions.map((q, i) => {
+                  const myAnswer = mySub?.answers?.find(a => a.question_id === q.id);
+                  const locked = isTeacher || !!mySub?.submitted_at;
+                  return (
+                    <div key={q.id} className="rounded-xl border border-slate-100 p-4">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xs font-bold text-slate-400">{i + 1}.</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-slate-800">{q.text}</p>
+                          <p className="mt-0.5 text-[10px] text-slate-400">{TYPE_LABEL[q.type]} · {q.points} poin</p>
+                        </div>
+                        {myAnswer?.is_correct === true && <Badge color="emerald">Benar</Badge>}
+                        {myAnswer?.is_correct === false && <Badge color="rose">Salah</Badge>}
+                        {myAnswer && myAnswer.is_correct === null && <Badge color="amber">Dinilai guru</Badge>}
+                      </div>
+
+                      <div className="mt-3 space-y-2 pl-5">
+                        {q.type === 'pg' && (q.options ?? []).map(opt => (
+                          <label key={opt} className={cn('flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs transition',
+                            (locked ? myAnswer?.answer : answers[q.id]) === opt ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 hover:bg-slate-50',
+                            locked && 'cursor-default')}>
+                            <input
+                              type="radio"
+                              name={`q-${q.id}`}
+                              disabled={locked}
+                              checked={(locked ? myAnswer?.answer : answers[q.id]) === opt}
+                              onChange={() => setAnswers(a => ({ ...a, [q.id]: opt }))}
+                            />
+                            <span className="text-slate-700">{opt}</span>
+                            {isTeacher && q.answer === opt && <Badge color="emerald">Kunci</Badge>}
+                          </label>
+                        ))}
+
+                        {q.type !== 'pg' && !locked && (
+                          <textarea
+                            rows={q.type === 'essay' ? 4 : 2}
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                            placeholder={q.type === 'essay' ? 'Tulis jawaban esai…' : 'Jawaban singkat…'}
+                            value={answers[q.id] ?? ''}
+                            onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                          />
+                        )}
+
+                        {q.type !== 'pg' && locked && (
+                          <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
+                            {myAnswer?.answer || (isTeacher ? <span className="text-slate-400">Jawaban siswa tampil di daftar pengumpulan.</span> : <span className="text-slate-400">—</span>)}
+                          </div>
+                        )}
+
+                        {isTeacher && q.type !== 'pg' && q.answer && (
+                          <p className="text-[11px] text-emerald-700"><b>Kunci:</b> {q.answer}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
           {!isTeacher && (
             <Card title="Pengumpulan Saya" subtitle="Pengumpulan online dengan dukungan revisi">
               {mySub?.status === 'dinilai' && (
@@ -218,12 +307,19 @@ export default function TugasDetail() {
                     className="flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 py-8 transition hover:border-indigo-400 hover:bg-indigo-50/40"
                   >
                     <Upload className="mb-2 h-8 w-8 text-slate-400" />
-                    <p className="text-sm font-bold text-slate-700">{file?.name || 'Klik untuk pilih file jawaban'}</p>
+                    <p className="text-sm font-bold text-slate-700">
+                      {file?.name || (hasQuestions ? 'Lampirkan berkas (opsional)' : 'Klik untuk pilih file jawaban')}
+                    </p>
                     <p className="mt-1 text-[11px] text-slate-400">PDF/Word/gambar · maks 20 MB · pengumpulan online</p>
                   </button>
-                  <Button className="mt-4 w-full" disabled={!file || submitting} onClick={submit}>
+                  <Button className="mt-4 w-full" disabled={(!hasQuestions && !file) || submitting} onClick={submit}>
                     <Send className="h-4 w-4" /> {submitting ? 'Mengunggah…' : mySub?.status === 'revisi' ? 'Kumpulkan Ulang (Revisi)' : 'Kumpulkan Tugas'}
                   </Button>
+                  {hasQuestions && (
+                    <p className="mt-2 text-center text-[11px] text-slate-400">
+                      Jawaban soal di atas ikut terkirim. Soal objektif langsung dinilai otomatis.
+                    </p>
+                  )}
                 </div>
               )}
             </Card>

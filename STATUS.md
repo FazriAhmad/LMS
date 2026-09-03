@@ -255,6 +255,21 @@ Laporan user: login sebagai guru, **tidak bisa menambah modul pembelajaran**, da
 
 **Sudah teruji end-to-end lewat browser sebagai guru**: tambah modul "Trigonometri Dasar" → muncul sebagai Modul 4 → tambah materi PDF ke modul itu → muncul dengan ukuran berkas benar → ubah deadline tugas 7 Sep → 24 Des 2026 → **diverifikasi masih benar setelah reload halaman** (bukan cuma state lokal). Data uji dibersihkan sesudahnya: modul + materinya dihapus (file ikut), deadline dikembalikan ke 7 Sep 2026.
 
+### Tugas bersoal — esai/PG & ambil dari Bank Soal (2026-09-03)
+
+Permintaan user: saat guru membuat tugas, belum bisa membuat soal — mintanya bisa bikin soal **esai atau PG**, atau **mengambil dari bank soal**.
+
+**Keputusan desain: memakai ulang bank soal (`questions`) yang sama dengan Quiz & Ujian, bukan tabel soal baru.** Konsekuensinya bagus dua arah: soal yang ditulis guru lewat form Tugas otomatis masuk bank dan bisa dipakai lagi di quiz/ujian, dan statistik Bank Soal (`used_count`/`correct_rate`) ikut menghitung pemakaian di tugas. Auto-grading juga memakai `Question::grade()` yang sama persis dengan Quiz — jadi perilakunya konsisten (pg/tf cocok-persis, isian toleran spasi/huruf besar + keyword alternatif, esai selalu manual), **tanpa menduplikasi logika penilaian**.
+
+**Kenapa tetap mesin sendiri, bukan menumpang Quiz**: Quiz punya timer (`duration_min`) & batas percobaan, Tugas punya deadline & alur revisi. Yang dibagi cuma bank soal + fungsi penilaiannya.
+
+- **2 tabel baru**: `assignment_questions` (pivot ke bank soal, dengan `order`) dan `assignment_answers` (jawaban per soal). Jawaban menempel ke baris `assignment_submissions` yang sudah ada — **bukan tabel "attempt" baru**, karena Tugas memang cuma punya satu pengumpulan per siswa (unique `assignment_id`+`student_id`).
+- **Endpoint tidak bertambah**: `POST/PUT /courses/{course}/assignments` menerima `question_ids`, dan `POST /assignments/{id}/submit` menerima `answers` selain `file`. Soal baru ditulis lewat `POST /questions` yang sudah ada.
+- **Berkas jadi opsional kalau tugas punya soal** (dan tetap wajib kalau tidak) — divalidasi dinamis di `submit()`. Jadi tugas bersoal boleh tetap melampirkan lembar kerja.
+- **Nilai otomatis final kalau semua soal objektif**: skor = poin diperoleh / total poin × 100, status langsung `dinilai`. Kalau ada esai, status tetap `sudah` dan guru yang menentukan nilai akhir lewat endpoint grade yang sudah ada — hasil auto-grading per soal jadi acuannya.
+- **Kunci jawaban disembunyikan dari siswa sampai dia mengumpulkan** (`formatQuestions()`), pola yang sama dengan pengamanan Quiz di modul 07.
+- **Sudah teruji end-to-end lewat browser**: guru buat tugas → ambil 1 soal dari bank (25 poin) + tulis 1 soal PG baru (10 poin, otomatis masuk bank) → publikasikan → siswa membuka, **kunci jawaban tidak bocor**, menjawab → auto-grading memberi **29** (10/35 poin, 1 benar 1 salah) dan status langsung `dinilai` → guru melihat soal lengkap dengan kunci + pengumpulan siswa beserta nilainya. Data uji (tugas + soal baru) dibersihkan sesudahnya.
+
 ### Modul 16 — Laporan & Export
 - **Keputusan produk: sync, bukan Laravel Queue** seperti disarankan PRD — user pilih ini karena untuk skala satu sekolah proses langsung cukup cepat, dan queue worker terpisah (`php artisan queue:work`) nambah proses yang harus di-manage di luar web server. Gampang dipindah ke queue job asli nanti kalau laporan mulai berat/lambat, tanpa ubah query intinya.
 - **Export CSV native PHP** (`fputcsv`), bukan library `maatwebsite/excel`/`dompdf` — CSV buka mulus di Excel, jadi cukup buat kebutuhan "export ke Excel" tanpa nambah dependency baru. Export PDF asli (rapor dengan layout) tidak dikerjakan — beda kebutuhan dari CSV tabular, butuh dompdf + template desain.
