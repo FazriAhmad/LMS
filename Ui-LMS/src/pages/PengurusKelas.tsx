@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { Crown, Shield, Wallet, NotebookPen, UsersRound, ChevronDown, X } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { api, ApiError } from '../lib/api';
@@ -24,6 +25,22 @@ export default function PengurusKelas() {
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState<number | null>(null);
   const [menuFor, setMenuFor] = useState<number | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; flip: boolean } | null>(null);
+  const MENU_W = 192; // w-48
+  const MENU_H_EST = 250; // 5 peran + divider + cabut, dipakai buat deteksi kalau menu bakal kepotong bawah layar
+
+  const openMenu = (e: MouseEvent<HTMLButtonElement>, studentId: number) => {
+    e.stopPropagation();
+    if (menuFor === studentId) { setMenuFor(null); return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const flip = rect.bottom + MENU_H_EST > window.innerHeight;
+    setMenuPos({
+      left: rect.right - MENU_W,
+      top: flip ? rect.top - 6 : rect.bottom + 6,
+      flip,
+    });
+    setMenuFor(studentId);
+  };
 
   const load = () => {
     // Wali kelas cuma punya satu kelas — dicari langsung dari daftar kelas, tanpa perlu ID di URL.
@@ -40,6 +57,7 @@ export default function PengurusKelas() {
   const setRole = async (studentId: number, role: string) => {
     if (!roster) return;
     setMenuFor(null);
+    setMenuPos(null);
     setSavingId(studentId);
     try {
       await api.put(`/school-classes/${roster.school_class.id}/students/${studentId}/role`, { class_role: role || null });
@@ -58,7 +76,7 @@ export default function PengurusKelas() {
   const holderOf = (role: string) => roster.data.find(s => s.class_role === role);
 
   return (
-    <div onClick={() => menuFor !== null && setMenuFor(null)}>
+    <div onClick={() => { setMenuFor(null); setMenuPos(null); }}>
       <PageHeader title={`Pengurus Kelas ${roster.school_class.name}`} desc="Tunjuk ketua, wakil, sekretaris, bendahara, dan keamanan kelas" />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -90,46 +108,57 @@ export default function PengurusKelas() {
               </div>
               {s.class_role && <Badge color="indigo">{ROLE_LABEL[s.class_role] ?? s.class_role}</Badge>}
 
-              <div className="relative shrink-0">
-                <button
-                  onClick={e => { e.stopPropagation(); setMenuFor(m => m === s.student_id ? null : s.student_id); }}
-                  disabled={savingId === s.student_id}
-                  className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"
-                >
-                  {savingId === s.student_id ? 'Menyimpan…' : 'Jabatan'} <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-
-                {menuFor === s.student_id && (
-                  <div onClick={e => e.stopPropagation()} className="absolute right-0 z-10 mt-1.5 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                    {ROLES.map(r => (
-                      <button
-                        key={r.value}
-                        onClick={() => setRole(s.student_id, r.value)}
-                        className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition hover:bg-slate-50',
-                          s.class_role === r.value ? 'text-indigo-600' : 'text-slate-600')}
-                      >
-                        <r.icon className="h-3.5 w-3.5" /> {r.label}
-                      </button>
-                    ))}
-                    {s.class_role && (
-                      <>
-                        <div className="my-1 border-t border-slate-100" />
-                        <button
-                          onClick={() => setRole(s.student_id, '')}
-                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
-                        >
-                          <X className="h-3.5 w-3.5" /> Cabut Jabatan
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={e => openMenu(e, s.student_id)}
+                disabled={savingId === s.student_id}
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-500 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"
+              >
+                {savingId === s.student_id ? 'Menyimpan…' : 'Jabatan'} <ChevronDown className="h-3.5 w-3.5" />
+              </button>
             </div>
           ))}
           {roster.data.length === 0 && <p className="py-8 text-center text-sm text-slate-400">Belum ada siswa di kelas ini.</p>}
         </div>
       </Card>
+
+      {/*
+        Diposisikan `fixed` berdasar posisi tombolnya (bukan `absolute` di dalam baris) supaya
+        tidak kepotong oleh `overflow-hidden` milik Card, dan otomatis membuka ke atas (`flip`)
+        kalau tombolnya dekat tepi bawah layar — kejadian nyata untuk baris-baris terakhir.
+      */}
+      {menuFor !== null && menuPos && (() => {
+        const s = roster.data.find(x => x.student_id === menuFor);
+        if (!s) return null;
+        return (
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ top: menuPos.top, left: menuPos.left, width: MENU_W, transform: menuPos.flip ? 'translateY(-100%)' : undefined }}
+            className="fixed z-40 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl"
+          >
+            {ROLES.map(r => (
+              <button
+                key={r.value}
+                onClick={() => setRole(s.student_id, r.value)}
+                className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition hover:bg-slate-50',
+                  s.class_role === r.value ? 'text-indigo-600' : 'text-slate-600')}
+              >
+                <r.icon className="h-3.5 w-3.5" /> {r.label}
+              </button>
+            ))}
+            {s.class_role && (
+              <>
+                <div className="my-1 border-t border-slate-100" />
+                <button
+                  onClick={() => setRole(s.student_id, '')}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                >
+                  <X className="h-3.5 w-3.5" /> Cabut Jabatan
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
