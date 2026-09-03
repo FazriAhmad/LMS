@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ChevronLeft, Clock, Paperclip, Upload, Star, MessageSquareText, RotateCcw,
   ClipboardCheck, FileText, Send, Pencil,
@@ -58,6 +58,7 @@ const isStaffRole = (role: string) => ['guru', 'walikelas', 'admin', 'superadmin
 
 export default function TugasDetail() {
   const { id } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, toast } = useStore();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
@@ -77,6 +78,7 @@ export default function TugasDetail() {
   const [editSaving, setEditSaving] = useState(false);
   const [editPicked, setEditPicked] = useState<ApiQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  const autoEditDone = useRef(false);
 
   const load = () => {
     api.get<{ data: Assignment }>(`/assignments/${id}`)
@@ -89,6 +91,20 @@ export default function TugasDetail() {
   };
 
   useEffect(load, [id]);
+
+  // Datang dari tombol Edit di daftar tugas (`/tugas/{id}?edit=1`) — buka modal edit langsung
+  // tanpa perlu klik "Edit Tugas" lagi begitu halamannya selesai dimuat.
+  useEffect(() => {
+    if (autoEditDone.current || !assignment || !user) return;
+    if (searchParams.get('edit') !== '1' || !isStaffRole(user.role)) return;
+    autoEditDone.current = true;
+    setEditTitle(assignment.title);
+    setEditDesc(assignment.description ?? '');
+    setEditDeadline(assignment.deadline.slice(0, 16));
+    setEditPicked(assignment.questions.map(q => ({ ...q, answer: q.answer ?? null, difficulty: '' })));
+    setEditOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [assignment, user, searchParams, setSearchParams]);
 
   if (error) return <Card className="border-rose-200 bg-rose-50/60"><p className="text-sm font-semibold text-rose-700">{error}</p></Card>;
   if (!assignment || !course || !user) return <div className="py-10 text-center text-sm text-slate-400">Memuat…</div>;
